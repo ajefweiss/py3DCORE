@@ -63,7 +63,7 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
         # get normal vectors
         (dr, dpsi, dphi) = _numba_jac(q0, q1, q2, rho_0, rho_1, delta)
-        #print(q0)
+
         # unit normal vectors
         dr = dr / np.linalg.norm(dr)
         dpsi_norm = np.linalg.norm(dpsi)
@@ -71,18 +71,16 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
         dphi_norm = np.linalg.norm(dphi)
         dphi = dphi / dphi_norm
 
-        # correct twist
-        t = turns * dphi_norm / dpsi_norm
-
         br = 0
-        fluxfactor = 1 / np.sin(q1 / 2)**2
 
-        if fluxfactor > 10:
-            fluxfactor = 10
+        h = (delta - 1)**2 / (1 + delta)**2
+        E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
-        denom = (1 + bradius**2 * t**2)
-        bpsi = b_t / denom * fluxfactor
-        bphi = b_t * t / denom * fluxfactor
+        t = turns * rho_1 / rho_0 * E / 2 / np.pi * np.sin(q1 / 2)**2
+
+        denom = (1 + t**2 * q0**2)
+        bpsi = b_t / denom
+        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2))
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi

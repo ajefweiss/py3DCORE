@@ -333,7 +333,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
 
         return fl
 
-    def visualize_wireframe(self, index=0, r=1.0):
+    def visualize_wireframe(self, index=0, r=1.0, d=10):
         """Generate model wireframe.
 
         Parameters
@@ -349,7 +349,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             Wireframe array (to be used with plot_wireframe).
         """
         r = np.array([np.abs(r)], dtype=self.dtype)
-        d = 10
+
         c = 360 // d + 1
         u = np.radians(np.r_[0:360. + d:d])
         v = np.radians(np.r_[0:360. + d:d])

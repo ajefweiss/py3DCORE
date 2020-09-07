@@ -36,8 +36,6 @@ def generate_quaternions(iparams_arr, qs_sx, qs_xs, use_gpu=False, indices=None)
 
     if use_gpu and cuda.is_available():
         (i1, i2, i3) = (indices[0], indices[1], indices[2])
-
-        # WIP
     else:
         (i1, i2, i3) = (indices[0], indices[1], indices[2])
         (lon, lat, inc) = (iparams_arr[:, i1], iparams_arr[:, i2], iparams_arr[:, i3])

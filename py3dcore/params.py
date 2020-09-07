@@ -9,6 +9,7 @@ import logging
 import numba
 import numpy as np
 import scipy
+import scipy.stats
 
 
 class Base3DCOREParameters(object):
@@ -122,6 +123,27 @@ class Base3DCOREParameters(object):
 
                     iparams_arr[:, index] = draw_numbers(np.random.gamma, maxv, minv, size,
                                                          **kwargs)
+                elif param["distribution"] == "log-uniform":
+                    maxv = param["maximum"]
+                    minv = param["minimum"]
+
+                    kwargs = {
+                        "a": minv,
+                        "b": maxv
+                    }
+
+                    iparams_arr[:, index] = draw_numbers(scipy.stats.loguniform.rvs, maxv, minv,
+                                                         size, **kwargs)
+                elif param["distribution"] == "exponential":
+                    maxv = param["maximum"]
+                    minv = param["minimum"]
+
+                    kwargs = {
+                        "scale": param["scale"]
+                    }
+
+                    iparams_arr[:, index] = draw_numbers(custom_exponential, maxv, minv,
+                                                         size, **kwargs)
                 else:
                     raise NotImplementedError
 
@@ -276,6 +298,15 @@ class Base3DCOREParameters(object):
                 self.minv_arr[index] = param["minimum"]
                 self.dp1_arr[index] = param.get("shape", 0)
                 self.dp2_arr[index] = param.get("scale", 0)
+            elif param["distribution"] == "log-uniform":
+                self.type_arr[index] = 4
+                self.maxv_arr[index] = param["maximum"]
+                self.minv_arr[index] = param["minimum"]
+            elif param["distribution"] == "exponential":
+                self.type_arr[index] = 5
+                self.maxv_arr[index] = param["maximum"]
+                self.minv_arr[index] = param["minimum"]
+                self.dp1_arr[index] = param.get("scale", 0)
             else:
                 raise NotImplementedError
 
@@ -310,6 +341,14 @@ def draw_numbers(func, maxv, minv, size, **kwargs):
                                len(filter), size)
 
     return numbers
+
+
+def custom_exponential(**kwargs):
+    numbers = np.random.exponential(**kwargs)
+
+    signs = np.random.randint(2, size=len(numbers))
+
+    return numbers * (1 - 2 * signs)
 
 
 @numba.njit
@@ -480,5 +519,12 @@ def _numba_calculate_weights_priors(particles, weights, type_arr, dp1_arr, dp2_a
                 # gamma distribution
                 weights[i] *= np.exp(-particles[i, j]/dp2_arr[j]) * particles[i, j] ** (
                     dp1_arr[j] - 1) / scipy.special.gamma(dp1_arr[j]) / dp2_arr[j]**dp1_arr[j]
+            elif type_arr[j] == 4:
+                # log-uniform distribution
+                weights[i] *= 1 / particles[i, j]
+            elif type_arr[j] == 5:
+                # exponential distribution
+                value = np.abs(particles[i, j])
+                weights[i] *= np.exp(-value / dp1_arr[j])
             else:
                 raise NotImplementedError

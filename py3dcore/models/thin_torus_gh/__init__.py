@@ -116,7 +116,7 @@ thin_torus_gh_parameters = {
         "maximum": 360,
         "minimum": 0,
         "boundary": "periodic",
-        "label": "I"
+        "label": "O"
     },
     "cme_diameter_1au": {
         "index": 4,
@@ -131,7 +131,7 @@ thin_torus_gh_parameters = {
         "index": 5,
         "name": "aspect ratio",
         "distribution": "uniform",
-        "maximum": 8.5,
+        "maximum": 12,
         "minimum": .5,
         "boundary": "continuous",
         "label": "\delta"
@@ -167,7 +167,8 @@ thin_torus_gh_parameters = {
     "magnetic_field_radius": {
         "index": 9,
         "name": "magnetic coeff",
-        "distribution": "uniform",
+        "distribution": "fixed",
+        "fixed_value": 1,
         "maximum": 2,
         "minimum": 0.1,
         "boundary": "continuous",

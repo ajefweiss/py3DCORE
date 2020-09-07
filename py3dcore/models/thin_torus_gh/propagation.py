@@ -40,8 +40,7 @@ def _numba_p(t, iparams, sparams):
 
         bg_sgn = int(-1 + 2 * int(v > bg_v))
 
-        rt = (bg_sgn / bg_d * np.log1p(bg_sgn *
-                                       bg_d * dv * dt) + bg_v * dt + r) / 1.496e8
+        rt = (bg_sgn / bg_d * np.log1p(bg_sgn * bg_d * dv * dt) + bg_v * dt + r) / 1.496e8
         vt = dv / (1 + bg_sgn * bg_d * dv * dt) + bg_v
 
         rho_1 = d * (rt ** 1.14) / 2
