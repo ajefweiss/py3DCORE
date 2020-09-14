@@ -333,6 +333,67 @@ class Toroidal3DCOREModel(Base3DCOREModel):
 
         return fl
 
+    def visualize_fieldline_dpsi(self, q0, dpsi=np.pi, index=0, step_size=0.01):
+        """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
+        returns the field lines in (s) coordinates.
+
+        Parameters
+        ----------
+        q0 : np.ndarray
+            Starting point in (q) coordinates.
+        dpsi: float
+            Delta psi to integrate by, default np.pi
+        index : int, optional
+            Model run index, by default 0.
+        step_size : float, optional
+            Integration step size, by default 0.01.
+
+        Returns
+        -------
+        np.ndarray
+            Integrated magnetic field lines in (s) coordinates.
+        """
+        # only implemented in cpu mode
+        if self.use_gpu:
+            raise NotImplementedError("visualize_fieldline not supported in gpu mode")
+
+        _tva = np.empty((3,), dtype=self.dtype)
+        _tvb = np.empty((3,), dtype=self.dtype)
+
+        self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
+               use_gpu=False)
+
+        fl = [np.array(_tva, dtype=self.dtype)]
+
+        def iterate(s):
+            self.f(s, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
+                   use_gpu=False)
+            self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
+                   use_gpu=False, bounded=False)
+            return _tvb / np.linalg.norm(_tvb)
+
+        psi_pos = q0[1]
+        dpsi_count = 0
+
+        while dpsi_count < dpsi:
+            # use implicit method and least squares for calculating the next step
+            sol = getattr(least_squares(
+                lambda x: x - fl[-1] - step_size *
+                iterate((x.astype(self.dtype) + fl[-1]) / 2),
+                fl[-1]), "x")
+
+            fl.append(np.array(sol.astype(self.dtype)))
+
+            self.f(fl[-1], _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
+                   use_gpu=False)
+
+            dpsi_count += np.abs(psi_pos - _tva[1])
+            psi_pos = _tva[1]
+
+        fl = np.array(fl, dtype=self.dtype)
+
+        return fl
+
     def visualize_wireframe(self, index=0, r=1.0, d=10):
         """Generate model wireframe.
 

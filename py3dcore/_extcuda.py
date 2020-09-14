@@ -5,39 +5,47 @@
 Utility functions for Numba CUDA.
 """
 
-import math
-import numba
+import logging
 import numba.cuda as cuda
 import numpy as np
 
+from functtools import lru_cache
 
-def get_threads_blocks(length):
+
+@lru_cache
+def get_threads_blocks(length, max_thread_size=9):
     """Calculate thread/block sizes for launching CUDA kernels.
 
     Parameters
     ----------
     length : int
-        Total number of threads.
+        Number of threads.
+    max_thread_size : int
+        Maximum thread size in 2^N.
 
     Returns
     -------
     (int, int)
         Number of threads and thread blocks.
     """
-    if length < 512:
-        return length, 1
-    elif length % 512 == 0:
-        return 512, length // 512
-    elif length % 256 == 0:
-        return 256, length // 256
-    elif length % 128 == 0:
-        return 128, length // 128
-    elif length % 64 == 0:
-        return 64, length // 64
-    elif length % 32 == 0:
-        return 32, length // 32
-    else:
-        raise ValueError("number of threads is invalid")
+    logger = logging.getLogger(__name__)
+
+    counter = 0
+
+    _length = length
+
+    while True:
+        if _length % 2 == 1:
+            logger.warning("get_threads_blocks could not fully factorize the number of threads")
+            break
+
+        _length //= 2
+        counter += 1
+
+        if counter >= max_thread_size:
+            break
+
+    return 2**counter, _length
 
 
 def initialize_array(shape, value, dtype=np.float32):
