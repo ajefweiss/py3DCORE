@@ -384,8 +384,8 @@ class Toroidal3DCOREModel(Base3DCOREModel):
 
             fl.append(np.array(sol.astype(self.dtype)))
 
-            self.f(fl[-1], _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
-                   use_gpu=False)
+            self.f(fl[-1], _tva, self.iparams_arr[index], self.sparams_arr[index],
+                   self.qs_sx[index], use_gpu=False)
 
             dpsi_count += np.abs(psi_pos - _tva[1])
             psi_pos = _tva[1]
