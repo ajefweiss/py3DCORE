@@ -6,7 +6,7 @@ import numpy as np
 
 # Wrappers
 
-def p(t, iparams, sparams, use_gpu=False):
+def p(t, iparams, sparams, **kwargs):
     """Wrapper function for propagating the flux rope state parameters.
 
     Parameters
@@ -17,11 +17,14 @@ def p(t, iparams, sparams, use_gpu=False):
         Initial parameters array.
     sparams : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
         State parameters array.
-    use_gpu : bool
-        GPU flag, by default False.
+
+    Other Parameters
+    ----------------
+    use_cuda : bool
+        CUDA flag, by default False.
     """
-    if use_gpu:
-        raise NotImplementedError
+    if kwargs.get("use_cuda", False):
+        raise NotImplementedError("CUDA functionality is not available yet")
     else:
         _numba_p(t, iparams, sparams)
 

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from py3dcore.model import Toroidal3DCOREModel
+from py3dcore.base import Toroidal3DCOREModel
 from py3dcore.params import Base3DCOREParameters
 from py3dcore.models.thin_torus_gh.coordinates import g, f
 from py3dcore.models.thin_torus_gh.magfield import h
@@ -38,7 +38,7 @@ class ThinTorusGH3DCOREModel(Toroidal3DCOREModel):
         4: b            magnetic field strength at center
     """
 
-    def __init__(self, launch, runs, use_gpu=False, **kwargs):
+    def __init__(self, launch, runs, **kwargs):
         """Initialize ThinTorusGH3DCOREModel model.
 
         Parameters
@@ -47,8 +47,6 @@ class ThinTorusGH3DCOREModel(Toroidal3DCOREModel):
             Initial datetime.
         runs : int
             Number of parallel model runs.
-        use_gpu : bool, optional
-            GPU flag, by default False.
 
         Other Parameters
         ----------------
@@ -56,6 +54,8 @@ class ThinTorusGH3DCOREModel(Toroidal3DCOREModel):
             CUDA device, by default 0.
         dtype: type
             Data type, by default np.float32.
+        use_cuda : bool
+            CUDA flag, by default False.
         """
         funcs = {
             "g": g,
@@ -72,7 +72,7 @@ class ThinTorusGH3DCOREModel(Toroidal3DCOREModel):
             parameters = Base3DCOREParameters(parameters, dtype=dtype)
 
         super(ThinTorusGH3DCOREModel, self).__init__(
-            launch, funcs, parameters, sparams_count=5, runs=runs, use_gpu=use_gpu, **kwargs
+            launch, funcs, parameters, sparams_count=5, runs=runs, **kwargs
         )
 
     @classmethod

@@ -11,7 +11,7 @@ import numpy as np
 from numba import guvectorize
 
 
-def cholesky(mat, use_gpu=False):
+def cholesky(mat, **kwargs):
     """Cholesky Decomposition.
 
     Uses the LDL variant of the Cholesky decomposition to compute the lower triangular matrix of a
@@ -21,16 +21,19 @@ def cholesky(mat, use_gpu=False):
     ----------
     mat : np.ndarray
         Single or multiple positive semi-definite matrix/matrices.
-    use_gpu : bool
-        GPU flag, by default False.
+
+    Other Parameters
+    ----------------
+    use_cuda : bool
+        CUDA flag, by default False.
 
     Returns
     -------
     np.ndarray
         Lower triangular matrix/matrices.
     """
-    if use_gpu and cuda.is_available():
-        raise NotImplementedError
+    if kwargs.get("use_cuda", False):
+        raise NotImplementedError("CUDA functionality is not available yet")
     else:
         return _numba_ldl_lsqrtd(mat)
 

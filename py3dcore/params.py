@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-"""parameters.py
+"""params.py
 
-Implements the base 3DCORE parameter classes.
+Implements the base 3DCORE parameter class.
 """
 
 import logging
@@ -13,6 +13,8 @@ import scipy.stats
 
 
 class Base3DCOREParameters(object):
+    """Base 3DCORE parameters class.
+    """
     params_dict = None
 
     dtype = None
@@ -29,14 +31,16 @@ class Base3DCOREParameters(object):
         Other Parameters
         ----------------
         dtype: type
-            Data type, by default np.float32.
+            Numpy data type, by default np.float32.
         qindices: np.ndarray
             Quaternion array columns, by default [1, 2, 3].
         """
         self.params_dict = params_dict
 
         self.dtype = kwargs.get("dtype", np.float32)
-        self.qindices = np.array(kwargs.get("qindices", np.array([1, 2, 3]))).ravel()
+        self.qindices = np.array(
+            kwargs.get("qindices", np.array([1, 2, 3]))
+        ).ravel().astype(int)
 
         # update arrays
         self._update_arr()
@@ -69,26 +73,25 @@ class Base3DCOREParameters(object):
         else:
             raise StopIteration
 
-    def generate(self, iparams_arr, use_gpu=False, **kwargs):
+    def generate(self, iparams_arr, **kwargs):
         """Generate initial parameters
 
         Parameters
         ----------
-        iparams : Union[np.ndarray,
-            List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        iparams : Union[np.ndarray, List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Initial parameters array.
-        use_gpu : bool
-            GPU flag, by default False.
 
         Other Parameters
         ----------------
         rng_states : List[numba.cuda.cudadrv.devicearray.DeviceNDArray]
             CUDA rng state array.
+        use_cuda : bool
+            CUDA flag, by default False.
         """
         size = len(iparams_arr)
 
-        if use_gpu:
-            raise NotImplementedError
+        if kwargs.get("use_cuda", False):
+            raise NotImplementedError("CUDA functionality is not available yet")
         else:
             for param in self:
                 index = param["index"]
@@ -99,8 +102,7 @@ class Base3DCOREParameters(object):
                     maxv = param["maximum"]
                     minv = param["minimum"]
 
-                    iparams_arr[:, index] = np.random.rand(
-                        size) * (maxv - minv) + minv
+                    iparams_arr[:, index] = np.random.rand(size) * (maxv - minv) + minv
                 elif param["distribution"] == "gaussian":
                     maxv = param["maximum"]
                     minv = param["minimum"]
@@ -110,7 +112,7 @@ class Base3DCOREParameters(object):
                         "scale": param["std"]
                     }
 
-                    iparams_arr[:, index] = draw_numbers(np.random.normal, maxv, minv, size,
+                    iparams_arr[:, index] = draw_iparams(np.random.normal, maxv, minv, size,
                                                          **kwargs)
                 elif param["distribution"] == "gamma":
                     maxv = param["maximum"]
@@ -121,7 +123,7 @@ class Base3DCOREParameters(object):
                         "scale": param["scale"]
                     }
 
-                    iparams_arr[:, index] = draw_numbers(np.random.gamma, maxv, minv, size,
+                    iparams_arr[:, index] = draw_iparams(np.random.gamma, maxv, minv, size,
                                                          **kwargs)
                 elif param["distribution"] == "log-uniform":
                     maxv = param["maximum"]
@@ -132,7 +134,7 @@ class Base3DCOREParameters(object):
                         "b": maxv
                     }
 
-                    iparams_arr[:, index] = draw_numbers(scipy.stats.loguniform.rvs, maxv, minv,
+                    iparams_arr[:, index] = draw_iparams(scipy.stats.loguniform.rvs, maxv, minv,
                                                          size, **kwargs)
                 elif param["distribution"] == "exponential":
                     maxv = param["maximum"]
@@ -142,59 +144,55 @@ class Base3DCOREParameters(object):
                         "scale": param["scale"]
                     }
 
-                    iparams_arr[:, index] = draw_numbers(custom_exponential, maxv, minv,
+                    iparams_arr[:, index] = draw_iparams(custom_exponential, maxv, minv,
                                                          size, **kwargs)
                 else:
-                    raise NotImplementedError
+                    raise NotImplementedError("%s distribution is not implemented",
+                                              param["distribution"])
 
         self._update_arr()
 
-    def perturb(self, iparams_arr, particles, weights, kernels_lower, use_gpu=False, **kwargs):
-        """Perburb particles.
+    def perturb(self, iparams_arr, particles, weights, kernels_lower, **kwargs):
+        """Perburb parameters.
 
         Parameters
         ----------
-        iparams : Union[np.ndarray,
-            List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        iparams : Union[np.ndarray, List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Initial parameters array.
-        particles : Union[np.ndarray,
-            List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        particles : Union[np.ndarray, List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Particles.
-        weights : Union[np.ndarray,
-            List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        weights : Union[np.ndarray, List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Weight array.
-        kernels_lower : Union[np.ndarray,
-            List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        kernels_lower : Union[np.ndarray, List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Transition kernels in the form of a lower triangular matrix.
             Number of dimensions determines the type of method used.
-        use_gpu : bool
-            GPU flag, by default False.
 
         Other Parameters
         ----------------
         rng_states : List[numba.cuda.cudadrv.devicearray.DeviceNDArray]
             CUDA rng state array.
+        use_cuda : bool
+            CUDA flag, by default False.
         """
-        if use_gpu:
-            raise NotImplementedError
+        if kwargs.get("use_cuda", False):
+            raise NotImplementedError("CUDA functionality is not available yet")
         else:
             if kernels_lower.ndim == 1:
-                raise DeprecationWarning
+                raise DeprecationWarning("1D transition kernels are no longer supported")
             elif kernels_lower.ndim == 2:
                 # perturbation with one covariance matrix
-                _numba_perturb_particles_kernel(iparams_arr, particles, weights, kernels_lower,
-                                                self.type_arr, self.bound_arr, self.maxv_arr,
-                                                self.minv_arr)
+                _numba_perturb_with_kernel(iparams_arr, particles, weights, kernels_lower,
+                                           self.type_arr, self.bound_arr, self.maxv_arr,
+                                           self.minv_arr)
             elif kernels_lower.ndim == 3:
                 # perturbation with local covariance matrices
-                _numba_perturb_particles_kernels(iparams_arr, particles, weights, kernels_lower,
-                                                 self.type_arr, self.bound_arr, self.maxv_arr,
-                                                 self.minv_arr)
+                _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower,
+                                            self.type_arr, self.bound_arr, self.maxv_arr,
+                                            self.minv_arr)
             else:
                 raise ValueError("kernel array must be 3-dimensional or lower")
 
-    def weight(self, particles, particles_old, weights, weights_old, kernels, use_gpu=False,
-               **kwargs):
+    def weight(self, particles, particles_old, weights, weights_old, kernels, **kwargs):
         """Update particle weights.
 
         Parameters
@@ -214,41 +212,43 @@ class Base3DCOREParameters(object):
         kernels : Union[np.ndarray,
             List[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
             Transition kernels. Number of dimensions determines the type of method used.
-        use_gpu : bool
-            GPU flag, by default False.
 
         Other Parameters
         ----------------
         exclude_priors: bool
             Exclude prior distributions from weighting, by default False.
+        use_cuda : bool
+            CUDA flag, by default False.
         """
         logger = logging.getLogger(__name__)
 
-        if use_gpu:
-            raise NotImplementedError
+        if kwargs.get("use_cuda", False):
+            raise NotImplementedError("CUDA functionality is not available yet")
         else:
             if kernels.ndim == 1:
-                raise DeprecationWarning
+                raise DeprecationWarning("1D transition kernels are no longer supported")
             elif kernels.ndim == 2:
-                _numba_calculate_weights_kernel(particles, particles_old,
-                                                weights, weights_old, kernels)
+                _numba_weights_with_kernel(particles, particles_old,
+                                           weights, weights_old, kernels)
             elif kernels.ndim == 3:
-                _numba_calculate_weights_kernels(particles, particles_old,
-                                                 weights, weights_old, kernels)
+                _numba_weights_with_kernels(particles, particles_old,
+                                            weights, weights_old, kernels)
             else:
                 raise ValueError("kernel array must be 3-dimensional or lower")
 
+            # include priors into weighting scheme
             if not kwargs.get("exclude_priors", False):
                 _numba_calculate_weights_priors(
                     particles, weights, self.type_arr, self.dp1_arr, self.dp2_arr)
 
-            # a hack for big weights
+            # a hack for abnormally big weights
             quant = np.quantile(weights, 0.99)
 
             for i in range(0, len(weights)):
                 if weights[i] > quant:
                     weights[i] = 0
 
+            # find and remove bad weights (NaN)
             nanc = np.sum(np.isnan(weights))
             infc = np.sum(weights == np.inf)
 
@@ -264,7 +264,15 @@ class Base3DCOREParameters(object):
                 weights[i] /= wsum
 
     def _update_arr(self):
-        """Convert params_dict to arrays.
+        """Translate params_dict to arrays.
+
+        Following distributions are supported:
+            - 0 fixed value (delta)
+            - 1 uniform
+            - 2 gaussian, sigma
+            - 3 gamma, shape+scale
+            - 4 log-uniform
+            - 5 exponential, scale
         """
         self.active = np.zeros((len(self), ), dtype=self.dtype)
         self.bound_arr = np.zeros((len(self), ), dtype=self.dtype)
@@ -308,23 +316,24 @@ class Base3DCOREParameters(object):
                 self.minv_arr[index] = param["minimum"]
                 self.dp1_arr[index] = param.get("scale", 0)
             else:
-                raise NotImplementedError
+                raise NotImplementedError("%s distribution is not implemented",
+                                          param["distribution"])
 
             if param["boundary"] == "continuous":
                 self.bound_arr[index] = 0
             elif param["boundary"] == "periodic":
                 self.bound_arr[index] = 1
             else:
-                raise NotImplementedError
+                raise NotImplementedError("%s boundary condition is not implemented",
+                                          param["boundary"])
 
 
-def draw_numbers(func, maxv, minv, size, **kwargs):
-    """Draw n random numbers from func, within the interval [minv, maxv].
+def draw_iparams(func, maxv, minv, size, **kwargs):
+    """Draw random numbers from func, within the interval [minv, maxv].
     """
     i = 0
 
     numbers = func(size=size, **kwargs)
-    
 
     while True:
         filter = ((numbers > maxv) | (numbers < minv))
@@ -352,8 +361,8 @@ def custom_exponential(**kwargs):
 
 
 @numba.njit
-def _numba_perturb_particles_kernel(iparams_arr, particles, weights, kernel_lower, type_arr,
-                                    bound_arr, maxv_arr, minv_arr):
+def _numba_perturb_with_kernel(iparams_arr, particles, weights, kernel_lower, type_arr,
+                               bound_arr, maxv_arr, minv_arr):
     for i in range(len(iparams_arr)):
         # particle selector si
         r = np.random.rand(1)[0]
@@ -407,8 +416,8 @@ def _numba_perturb_particles_kernel(iparams_arr, particles, weights, kernel_lowe
 
 
 @numba.njit
-def _numba_perturb_particles_kernels(iparams_arr, particles, weights, kernels_lower, type_arr,
-                                     bound_arr, maxv_arr, minv_arr):
+def _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower, type_arr,
+                                bound_arr, maxv_arr, minv_arr):
     for i in range(len(iparams_arr)):
         # particle selector si
         r = np.random.rand(1)[0]
@@ -465,8 +474,8 @@ def _numba_perturb_particles_kernels(iparams_arr, particles, weights, kernels_lo
         iparams_arr[i] = candidate
 
 
-@numba.njit(parallel=True, nogil=True)
-def _numba_calculate_weights_kernel(particles, particles_prev, weights, weights_prev, kernel):
+@numba.njit(parallel=True)
+def _numba_weights_with_kernel(particles, particles_prev, weights, weights_prev, kernel):
     inv_kernel = np.linalg.pinv(kernel).astype(particles.dtype)
 
     for i in numba.prange(len(particles)):
@@ -480,8 +489,8 @@ def _numba_calculate_weights_kernel(particles, particles_prev, weights, weights_
         weights[i] = 1 / nw
 
 
-@numba.njit(parallel=True, nogil=True)
-def _numba_calculate_weights_kernels(particles, particles_prev, weights, weights_prev, kernels):
+@numba.njit(parallel=True)
+def _numba_weights_with_kernels(particles, particles_prev, weights, weights_prev, kernels):
     inv_kernels = np.zeros_like(kernels).astype(particles.dtype)
 
     # compute kernel inverses
@@ -498,12 +507,13 @@ def _numba_calculate_weights_kernels(particles, particles_prev, weights, weights
         weights[i] = 1 / nw
 
 
-@numba.njit
+@numba.njit(inline="always")
 def _numba_calculate_weights_reduce(x1, x2, A):
     dx = (x1 - x2).astype(A.dtype)
     return np.dot(dx, np.dot(A, dx))
 
 
+# numba does not support scipy functions
 # @numba.njit(parallel=True)
 def _numba_calculate_weights_priors(particles, weights, type_arr, dp1_arr, dp2_arr):
     for i in range(len(weights)):
@@ -514,7 +524,7 @@ def _numba_calculate_weights_priors(particles, weights, type_arr, dp1_arr, dp2_a
             elif type_arr[j] == 2:
                 # gaussian distribution
                 weights[i] *= np.exp(-0.5 * (particles[i, j] -
-                                            dp1_arr[j])**2/dp2_arr[j]**2) / dp2_arr[j]
+                                             dp1_arr[j])**2/dp2_arr[j]**2) / dp2_arr[j]
             elif type_arr[j] == 3:
                 # gamma distribution
                 weights[i] *= np.exp(-particles[i, j]/dp2_arr[j]) * particles[i, j] ** (
@@ -527,4 +537,5 @@ def _numba_calculate_weights_priors(particles, weights, type_arr, dp1_arr, dp2_a
                 value = np.abs(particles[i, j])
                 weights[i] *= np.exp(-value / dp1_arr[j])
             else:
-                raise NotImplementedError
+                raise NotImplementedError("distribution #%i is not implemented",
+                                          type_arr[j])

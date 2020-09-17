@@ -5,12 +5,12 @@ import numba
 import numpy as np
 
 from numba import guvectorize
-from py3dcore.quaternions import _numba_quaternion_rotate
+from py3dcore.rotqs import _numba_quaternion_rotate
 
 
 # Wrappers
 
-def g(q, s, iparams, sparams, q_xs, use_gpu=False):
+def g(q, s, iparams, sparams, q_xs, **kwargs):
     """Wrapper function for transforming (q) coordinates to (s) coordinates using the tapered torus
     global shape.
 
@@ -24,21 +24,24 @@ def g(q, s, iparams, sparams, q_xs, use_gpu=False):
         The state parameter array.
     qs_xs : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
         Array for (x) -> (s) rotational quaternions.
-    use_gpu : bool
-        GPU flag, by default False.
+
+    Other Parameters
+    ----------------
+    use_cuda : bool
+        CUDA flag, by default False.
 
     Raises
     ------
     RuntimeError
         If oo method is called with gpu flag set.
     """
-    if use_gpu:
-        raise NotImplementedError
+    if kwargs.get("use_cuda", False):
+        raise NotImplementedError("CUDA functionality is not available yet")
     else:
         _numba_g(q, iparams, sparams, q_xs, s)
 
 
-def f(s, q, iparams, sparams, q_sx, use_gpu=False):
+def f(s, q, iparams, sparams, q_sx, **kwargs):
     """Wrapper function for transforming (s) coordinates to (q) coordinates using the tapered torus
     global shape.
 
@@ -52,16 +55,19 @@ def f(s, q, iparams, sparams, q_sx, use_gpu=False):
         The state parameter array.
     qs_sx : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
         Array for (s) -> (x) rotational quaternions.
-    use_gpu : bool
-        GPU flag, by default False.
+
+    Other Parameters
+    ----------------
+    use_cuda : bool
+        CUDA flag, by default False.
 
     Raises
     ------
     RuntimeError
         if oo method is called in gpu mode
     """
-    if use_gpu:
-        raise NotImplementedError
+    if kwargs.get("use_cuda", False):
+        raise NotImplementedError("CUDA functionality is not available yet")
     else:
         _numba_f(s, iparams, sparams, q_sx, q)
 

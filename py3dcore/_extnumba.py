@@ -10,6 +10,8 @@ import numpy as np
 
 
 def set_random_seed(seed):
+    """Sets python & numba seed to same value.
+    """
     np.random.seed(seed)
     _numba_set_random_seed(seed)
 

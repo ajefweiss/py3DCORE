@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""model.py
+"""base.py
 
 Implements the base 3DCORE model classes.
 """
@@ -14,7 +14,7 @@ from numba.cuda.random import create_xoroshiro128p_states as cxoro128p
 from scipy.optimize import least_squares
 
 from py3dcore._extnumba import set_random_seed
-from py3dcore.quaternions import generate_quaternions
+from py3dcore.rotqs import generate_quaternions
 
 
 class Base3DCOREModel(object):
@@ -33,13 +33,13 @@ class Base3DCOREModel(object):
     g = f = h = p = None
 
     runs = 0
-    use_gpu = False
+    use_cuda = False
 
     # internal
     _tva = _tvb = None
     _b = None
 
-    def __init__(self, launch, functions, parameters, sparams_count, runs, use_gpu=False, **kwargs):
+    def __init__(self, launch, functions, parameters, sparams_count, runs, **kwargs):
         """Initialize Base3DCOREModel.
 
         Initial parameters must be generated seperately (see generate_iparams).
@@ -49,28 +49,27 @@ class Base3DCOREModel(object):
         launch : datetime.datetime
             Initial datetime.
         functions : dict
-            Propagation, magnetic and transformation functions as a dictionary.
+            Propagation, magnetic and transformation functions as dict.
         parameters : py3dcore.model.Base3DCOREParameters
-            Model parameters.
+            Model parameters instance.
         sparams_count: int
             Number of state parameters.
         runs : int
             Number of parallel model runs.
-        use_gpu : bool, optional
-            GPU flag, by default False.
 
         Other Parameters
         ----------------
         cuda_device: int
             CUDA device, by default 0.
+        use_cuda : bool, optional
+            CUDA flag, by default False.
 
         Raises
         ------
         ValueError
-            If the number of model runs is not divisible by 256 and gpu flag is set.
+            If the number of model runs is not divisible by 256 and CUDA flag is set.
+            If cuda is selected but not available.
         """
-        logger = logging.getLogger(__name__)
-
         self.launch = launch.timestamp()
 
         self.g = functions["g"]
@@ -78,21 +77,20 @@ class Base3DCOREModel(object):
         self.h = functions["h"]
         self.p = functions["p"]
 
-        if self.use_gpu and runs > 512 and runs % 32 != 0:
-            logger.exception("for gpu mode the number of runs must be a multiple of 32")
-            raise ValueError("for gpu mode the number of runs must be a multiple of 32")
-
         self.parameters = parameters
         self.dtype = parameters.dtype
         self.runs = runs
 
-        if use_gpu and cuda.is_available():
-            cuda.select_device(kwargs.get("cuda_device", 0))
-            self.use_gpu = True
-        else:
-            self.use_gpu = False
+        self.use_cuda = kwargs.get("use_cuda", False)
 
-        if self.use_gpu:
+        if self.use_cuda and cuda.is_available():
+            raise NotImplementedError("CUDA functionality is not available yet")
+            # cuda.select_device(kwargs.get("cuda_device", 0))
+            # self.use_cuda = True
+        elif self.use_cuda:
+            raise ValueError("cuda is not available")
+
+        if self.use_cuda:
             self.iparams_arr = cuda.device_array((self.runs, len(self.parameters)),
                                                  dtype=self.dtype)
             self.sparams_arr = cuda.device_array((self.runs, sparams_count),
@@ -123,15 +121,15 @@ class Base3DCOREModel(object):
         seed : int
             Random number seed.
         """
-        if self.use_gpu:
+        if self.use_cuda:
             self.rng_states = cxoro128p(self.runs, seed=seed)
         else:
             set_random_seed(seed)
 
         self.parameters.generate(
-            self.iparams_arr, use_gpu=self.use_gpu, rng_states=self.rng_states)
+            self.iparams_arr, use_cuda=self.use_cuda, rng_states=self.rng_states)
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_gpu=self.use_gpu,
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
                              indices=self.parameters.qindices)
 
     def perturb_iparams(self, particles, weights, kernels):
@@ -146,10 +144,10 @@ class Base3DCOREModel(object):
         kernels : np.ndarray
             Transition kernels.
         """
-        self.parameters.perturb(self.iparams_arr, particles, weights, kernels, use_gpu=self.use_gpu,
-                                rng_states=self.rng_states)
+        self.parameters.perturb(self.iparams_arr, particles, weights, kernels,
+                                use_cuda=self.use_cuda, rng_states=self.rng_states)
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_gpu=self.use_gpu,
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
                              indices=self.parameters.qindices)
 
     def update_iparams(self, iparams_arr, seed=None):
@@ -163,14 +161,14 @@ class Base3DCOREModel(object):
             Random seed, by default None.
         """
         if seed:
-            if self.use_gpu:
+            if self.use_cuda:
                 self.rng_states = cxoro128p(self.runs, seed=seed)
             else:
                 set_random_seed(seed)
 
         self.iparams_arr = iparams_arr.astype(self.dtype)
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_gpu=self.use_gpu,
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
                              indices=self.parameters.qindices)
 
     def propagate(self, t):
@@ -183,7 +181,7 @@ class Base3DCOREModel(object):
         """
         dt = self.dtype(t.timestamp() - self.launch)
 
-        self.p(dt, self.iparams_arr, self.sparams_arr, use_gpu=self.use_gpu)
+        self.p(dt, self.iparams_arr, self.sparams_arr, use_cuda=self.use_cuda)
 
     def sim_field(self, s, b):
         """Calculate magnetic field vectors at (s) coordinates.
@@ -197,7 +195,7 @@ class Base3DCOREModel(object):
         """
         self.transform_sq(s, q=self._tva)
         self.h(self._tva, b, self.iparams_arr, self.sparams_arr, self.qs_xs,
-               use_gpu=self.use_gpu, rng_states=self.rng_states)
+               use_cuda=self.use_cuda, rng_states=self.rng_states)
 
     def sim_fields(self, t, pos, b=None):
         """Calculate magnetic field vectors at (s) coordinates and at times t (datetime timestamps).
@@ -231,11 +229,11 @@ class Base3DCOREModel(object):
             logger.exception("position array has invalid dimension")
             raise ValueError("position array has invalid dimension")
 
-        if self.use_gpu:
+        if self.use_cuda:
             pos = [cuda.to_device(p) for p in pos]
 
         if b is None:
-            if self.use_gpu:
+            if self.use_cuda:
                 if self._b is None or len(self._b[0]) != len(t) \
                         or self._b[0][0].shape != (self.runs, 3):
                     self._b = [cuda.device_array((self.runs, 3), dtype=self.dtype)
@@ -264,7 +262,7 @@ class Base3DCOREModel(object):
             The (q) coordinate array.
         """
         self.f(s, q, self.iparams_arr, self.sparams_arr, self.qs_sx,
-               use_gpu=self.use_gpu)
+               use_cuda=self.use_cuda)
 
     def transform_qs(self, s, q):
         """Transform (q) coordinates to (s) coordinates.
@@ -277,7 +275,7 @@ class Base3DCOREModel(object):
             The (s) coordinate array.
         """
         self.g(q, s, self.iparams_arr, self.sparams_arr, self.qs_xs,
-               use_gpu=self.use_gpu)
+               use_cuda=self.use_cuda)
 
 
 class Toroidal3DCOREModel(Base3DCOREModel):
@@ -302,22 +300,22 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             Integrated magnetic field lines in (s) coordinates.
         """
         # only implemented in cpu mode
-        if self.use_gpu:
-            raise NotImplementedError("visualize_fieldline not supported in gpu mode")
+        if self.use_cuda:
+            raise NotImplementedError("visualize_fieldline not supported in cuda mode")
 
         _tva = np.empty((3,), dtype=self.dtype)
         _tvb = np.empty((3,), dtype=self.dtype)
 
         self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-               use_gpu=False)
+               use_cuda=False)
 
         fl = [np.array(_tva, dtype=self.dtype)]
 
         def iterate(s):
             self.f(s, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
-                   use_gpu=False)
+                   use_cuda=False)
             self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-                   use_gpu=False, bounded=False)
+                   use_cuda=False, bounded=False)
             return _tvb / np.linalg.norm(_tvb)
 
         while len(fl) < steps:
@@ -354,22 +352,22 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             Integrated magnetic field lines in (s) coordinates.
         """
         # only implemented in cpu mode
-        if self.use_gpu:
-            raise NotImplementedError("visualize_fieldline not supported in gpu mode")
+        if self.use_cuda:
+            raise NotImplementedError("visualize_fieldline not supported in cuda mode")
 
         _tva = np.empty((3,), dtype=self.dtype)
         _tvb = np.empty((3,), dtype=self.dtype)
 
         self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-               use_gpu=False)
+               use_cuda=False)
 
         fl = [np.array(_tva, dtype=self.dtype)]
 
         def iterate(s):
             self.f(s, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
-                   use_gpu=False)
+                   use_cuda=False)
             self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-                   use_gpu=False, bounded=False)
+                   use_cuda=False, bounded=False)
             return _tvb / np.linalg.norm(_tvb)
 
         psi_pos = q0[1]
@@ -385,7 +383,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             fl.append(np.array(sol.astype(self.dtype)))
 
             self.f(fl[-1], _tva, self.iparams_arr[index], self.sparams_arr[index],
-                   self.qs_sx[index], use_gpu=False)
+                   self.qs_sx[index], use_cuda=False)
 
             dpsi_count += np.abs(psi_pos - _tva[1])
             psi_pos = _tva[1]
@@ -419,11 +417,11 @@ class Toroidal3DCOREModel(Base3DCOREModel):
         arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c ** 2, 3)
 
         # only implemented in cpu mode
-        if self.use_gpu:
-            raise NotImplementedError("visualize_fieldline not supported in gpu mode")
+        if self.use_cuda:
+            raise NotImplementedError("visualize_wireframe not supported in cuda mode")
 
         for i in range(0, len(arr)):
             self.g(arr[i], arr[i], self.iparams_arr[index], self.sparams_arr[index],
-                   self.qs_xs[index], use_gpu=False)
+                   self.qs_xs[index], use_cuda=False)
 
         return arr.reshape((c, c, 3))

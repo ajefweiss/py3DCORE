@@ -4,12 +4,12 @@ import numpy as np
 
 from numba import guvectorize
 from py3dcore.models.thin_torus_gh.coordinates import _numba_jac
-from py3dcore.quaternions import _numba_quaternion_rotate
+from py3dcore.rotqs import _numba_quaternion_rotate
 
 
 # Wrappers
 
-def h(q, b, iparams, sparams, q_xs, use_gpu=False, **kwargs):
+def h(q, b, iparams, sparams, q_xs, **kwargs):
     """Wrapper functions for calculating magnetic field vector at (q) coordinates in (s) according
     to the gold hoyle solution using the tapered torus model.
 
@@ -25,8 +25,6 @@ def h(q, b, iparams, sparams, q_xs, use_gpu=False, **kwargs):
         State parameter array.
     q_xs : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
         Array for (x) -> (s) rotational quaternions.
-    use_gpu : bool
-        GPU flag, by default False.
 
     Other Parameters
     ----------------
@@ -34,14 +32,16 @@ def h(q, b, iparams, sparams, q_xs, use_gpu=False, **kwargs):
         Return zero values if measurement is taken outside of the flux rope structure.
     rng_states : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
         CUDA rng state array.
+    use_cuda : bool, optional
+        CUDA flag, by default False.
 
     Raises
     ------
     RuntimeError
         If oo method is called with gpu flag set.
     """
-    if use_gpu:
-        raise NotImplementedError
+    if kwargs.get("use_cuda", False):
+        raise NotImplementedError("CUDA functionality is not available yet")
     else:
         bounded = kwargs.get("bounded", True)
 
@@ -57,7 +57,7 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
     (q0, q1, q2) = (q[0], q[1], q[2])
 
-    if q0 <= 1 or bounded == False:
+    if q0 <= 1 or bounded is False:
         (_, _, _, _, _, delta, _, _, turns, bradius, _, _, _, noise) = iparams
         (_, _, rho_0, rho_1, b_t) = sparams
 
@@ -73,14 +73,16 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
         br = 0
 
+        fluxfactor = 1 / np.sin(q1 / 2)**2
+
         h = (delta - 1)**2 / (1 + delta)**2
         E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
         t = turns * rho_1 / rho_0 * E / 2 / np.pi * np.sin(q1 / 2)**2
 
         denom = (1 + t**2 * q0**2)
-        bpsi = b_t / denom
-        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2))
+        bpsi = b_t / denom * fluxfactor
+        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi
