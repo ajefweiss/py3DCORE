@@ -134,10 +134,7 @@ class ABCSMC(object):
 
         self.t_launch = data["t_launch"]
 
-        if data["model"] == "TTGHv1" or data["model"] == "ThinTorusGH3DCOREModel":
-            self.model = py3dcore.models.TTGHv1
-        else:
-            raise ValueError("model not recognized", data["model"])
+        self.model = py3dcore.util.select_model(data["model"])
 
         self.parameters = data["parameters"]
         self.seed = data["seed"]
