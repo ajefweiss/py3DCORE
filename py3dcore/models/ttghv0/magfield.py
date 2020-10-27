@@ -3,7 +3,7 @@
 import numpy as np
 
 from numba import guvectorize
-from py3dcore.models.thin_torus_gh.coordinates import _numba_jac
+from py3dcore.models.ttghv0.coordinates import _numba_jac
 from py3dcore.rotqs import _numba_quaternion_rotate
 
 
@@ -73,12 +73,12 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
         br = 0
 
-        fluxfactor = 1 / np.sin(q1 / 2)**2
+        fluxfactor = 1
 
         h = (delta - 1)**2 / (1 + delta)**2
         E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
-        t = turns * rho_1 / rho_0 * E / 2 / np.pi * np.sin(q1 / 2)**2
+        t = turns * rho_1 / rho_0 * E / 2 / np.pi
 
         denom = (1 + t**2 * q0**2)
         bpsi = b_t / denom * fluxfactor

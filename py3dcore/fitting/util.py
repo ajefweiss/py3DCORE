@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-"""mode.py
+"""util.py
 
-Estimate mode from sample distribution
+Utility function for fitting results.
 """
 
 import numpy as np
@@ -18,7 +18,8 @@ def estimate_mode(iparams_arr, weights, bin_density=250):
             mode[i] = iparams_arr[0, i]
             continue
 
-        hist_counts, hist_edges = np.histogram(iparams_arr[:, i], weights=weights, bins=samples // bin_density)
+        hist_counts, hist_edges = np.histogram(iparams_arr[:, i], weights=weights,
+                                               bins=samples // bin_density)
 
         argmax = np.argmax(hist_counts)
 
@@ -28,6 +29,5 @@ def estimate_mode(iparams_arr, weights, bin_density=250):
             mode[i] = hist_edges[-1]
         else:
             mode[i] = (hist_edges[argmax] + hist_edges[argmax - 1]) / 2
-    
 
     return mode

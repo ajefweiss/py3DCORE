@@ -37,7 +37,7 @@ class Base3DCOREModel(object):
 
     # internal
     _tva = _tvb = None
-    _b = None
+    _b, _sp = None, None
 
     def __init__(self, launch, functions, parameters, sparams_count, runs, **kwargs):
         """Initialize Base3DCOREModel.
@@ -183,7 +183,7 @@ class Base3DCOREModel(object):
 
         self.p(dt, self.iparams_arr, self.sparams_arr, use_cuda=self.use_cuda)
 
-    def sim_field(self, s, b):
+    def get_field(self, s, b):
         """Calculate magnetic field vectors at (s) coordinates.
 
         Parameters
@@ -197,8 +197,34 @@ class Base3DCOREModel(object):
         self.h(self._tva, b, self.iparams_arr, self.sparams_arr, self.qs_xs,
                use_cuda=self.use_cuda, rng_states=self.rng_states)
 
-    def sim_fields(self, t, pos, b=None):
+    def get_sparams(self, sparams, sparams_out):
+        """Get selected sparams values.
+
+        Parameters
+        ----------
+        sparams : np.ndarray
+            Selected sparams indices.
+        sparams_out : np.ndarray
+            Output array.
+        """
+        if self.use_cuda:
+            raise NotImplementedError
+        else:
+            for i in range(len(sparams)):
+                sparam = sparams[i]
+                sparams_out[i] = self.sparams_arr[:, sparam]
+
+    def sim_fields(self, *args, **kwargs):
+        """Legacy dummy for simulate
+        """
+        if "b" in kwargs:
+            kwargs["b_out"] = kwargs.pop("b")
+
+        return self.simulate(*args, **kwargs)
+
+    def simulate(self, t, pos, sparams=None, b_out=None, sparams_out=None):
         """Calculate magnetic field vectors at (s) coordinates and at times t (datetime timestamps).
+        Additionally returns any selected sparams.
 
         Parameters
         ----------
@@ -206,13 +232,20 @@ class Base3DCOREModel(object):
             Evaluation datetimes.
         pos : np.ndarray
             Position vector array at evaluation datetimes.
-        b : Union[List[np.ndarray], List[numba.cuda.cudadrv.devicearray.DeviceNDArray]], optional
+        sparams : list[int]
+            List of state parameters to return.
+        b_out : Union[List[np.ndarray],
+                List[numba.cuda.cudadrv.devicearray.DeviceNDArray]], optional
             Magnetic field temporary array, by default None.
+        sparams_out : Union[List[np.ndarray],
+                      List[numba.cuda.cudadrv.devicearray.DeviceNDArray]], optional
+            State parameters temporary array, by default None.
 
         Returns
         -------
+        Union[list[np.ndarray], list[numba.cuda.cudadrv.devicearray.DeviceNDArray]],
         Union[list[np.ndarray], list[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
-            List of magnetic field output arrays at evaluation datetimes.
+            List of magnetic field output and state parameters at evaluation datetimes.
 
         Raises
         ------
@@ -232,7 +265,7 @@ class Base3DCOREModel(object):
         if self.use_cuda:
             pos = [cuda.to_device(p) for p in pos]
 
-        if b is None:
+        if b_out is None:
             if self.use_cuda:
                 if self._b is None or len(self._b[0]) != len(t) \
                         or self._b[0][0].shape != (self.runs, 3):
@@ -243,13 +276,33 @@ class Base3DCOREModel(object):
                     self._b = [np.empty((self.runs, 3), dtype=self.dtype)
                                for _ in range(0, len(t))]
 
-            b = self._b
+            b_out = self._b
+
+        if sparams and len(sparams) > 0 and sparams_out is None:
+            if self.use_cuda:
+                if self._sp is None or len(self._sp[0]) != len(t) \
+                        or self._sp[0][0].shape != (self.runs, len(sparams)):
+                    self._sp = [cuda.device_array((self.runs, len(sparams)), dtype=self.dtype)
+                                for _ in range(0, len(t))]
+            else:
+                if self._sp is None or len(self._sp) != len(t) or \
+                        self._sp[0].shape != (self.runs, len(sparams)):
+                    self._sp = [np.empty((self.runs, len(sparams)), dtype=self.dtype)
+                                for _ in range(0, len(t))]
+
+            sparams_out = self._sp
 
         for i in range(0, len(t)):
             self.propagate(t[i])
-            self.sim_field(pos[i], b[i])
+            self.get_field(pos[i], b_out[i])
 
-        return b
+            if sparams and len(sparams) > 0:
+                self.get_sparams(sparams, sparams_out[i])
+
+        if sparams and len(sparams) > 0:
+            return b_out, sparams_out
+        else:
+            return b_out
 
     def transform_sq(self, s, q):
         """Transform (s) coordinates to (q) coordinates.
@@ -279,7 +332,32 @@ class Base3DCOREModel(object):
 
 
 class Toroidal3DCOREModel(Base3DCOREModel):
-    def visualize_fieldline(self, q0, index=0, steps=1000, step_size=0.01):
+    def plot_fieldline(self, ax, fl, arrows=None, **kwargs):
+        """Plot magnetic field line.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Matplotlib axes.
+        fl : np.ndarray
+            Field line in (s) coordinates.
+        """
+        if arrows:
+            handles = []
+
+            for index in list(range(len(fl)))[::arrows][:-1]:
+                x, y, z = fl[index]
+                xv, yv, zv = fl[index + arrows // 2] - fl[index]
+
+                handles.append(ax.quiver(
+                    x, y, z, xv, yv, zv, **kwargs
+                ))
+
+            return handles
+        else:
+            return ax.plot(*fl.T, **kwargs)
+
+    def visualize_fieldline(self, q0, index=0, sign=1, steps=1000, step_size=0.005):
         """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
         returns the field lines in (s) coordinates.
 
@@ -289,6 +367,8 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             Starting point in (q) coordinates.
         index : int, optional
             Model run index, by default 0.
+        sign : int, optional
+            Integration direction, by default 1.
         steps : int, optional
             Number of integration steps, by default 1000.
         step_size : float, optional
@@ -303,8 +383,13 @@ class Toroidal3DCOREModel(Base3DCOREModel):
         if self.use_cuda:
             raise NotImplementedError("visualize_fieldline not supported in cuda mode")
 
+        if self.iparams_arr[index, -1] > 0 or self.iparams_arr[index, -1] < 0:
+            raise Warning("cannot generate field lines with non-zero noise level")
+
         _tva = np.empty((3,), dtype=self.dtype)
         _tvb = np.empty((3,), dtype=self.dtype)
+
+        sign = sign / np.abs(sign)
 
         self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
                use_cuda=False)
@@ -316,7 +401,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
                    use_cuda=False)
             self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
                    use_cuda=False, bounded=False)
-            return _tvb / np.linalg.norm(_tvb)
+            return sign * _tvb / np.linalg.norm(_tvb)
 
         while len(fl) < steps:
             # use implicit method and least squares for calculating the next step
@@ -331,7 +416,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
 
         return fl
 
-    def visualize_fieldline_dpsi(self, q0, dpsi=np.pi, index=0, step_size=0.01):
+    def visualize_fieldline_dpsi(self, q0, dpsi=np.pi, index=0, sign=1, step_size=0.005):
         """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
         returns the field lines in (s) coordinates.
 
@@ -343,6 +428,8 @@ class Toroidal3DCOREModel(Base3DCOREModel):
             Delta psi to integrate by, default np.pi
         index : int, optional
             Model run index, by default 0.
+        sign : int, optional
+            Integration direction, by default 1.
         step_size : float, optional
             Integration step size, by default 0.01.
 
@@ -355,8 +442,13 @@ class Toroidal3DCOREModel(Base3DCOREModel):
         if self.use_cuda:
             raise NotImplementedError("visualize_fieldline not supported in cuda mode")
 
+        if self.iparams_arr[index, -1] > 0 or self.iparams_arr[index, -1] < 0:
+            raise Warning("cannot generate field lines with non-zero noise level")
+
         _tva = np.empty((3,), dtype=self.dtype)
         _tvb = np.empty((3,), dtype=self.dtype)
+
+        sign = sign / np.abs(sign)
 
         self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
                use_cuda=False)
@@ -368,7 +460,7 @@ class Toroidal3DCOREModel(Base3DCOREModel):
                    use_cuda=False)
             self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
                    use_cuda=False, bounded=False)
-            return _tvb / np.linalg.norm(_tvb)
+            return sign * _tvb / np.linalg.norm(_tvb)
 
         psi_pos = q0[1]
         dpsi_count = 0
@@ -425,3 +517,38 @@ class Toroidal3DCOREModel(Base3DCOREModel):
                    self.qs_xs[index], use_cuda=False)
 
         return arr.reshape((c, c, 3))
+
+    def visualize_wireframe_dpsi(self, psi0, dpsi, index=0, r=1.0, d=10):
+        """Generate model wireframe.
+
+        Parameters
+        ----------
+        index : int, optional
+            Model run index, by default 0.
+        r : float, optional
+            Surface radius (r=1 equals the boundary of the flux rope), by default 1.0.
+
+        Returns
+        -------
+        np.ndarray
+            Wireframe array (to be used with plot_wireframe).
+        """
+        r = np.array([np.abs(r)], dtype=self.dtype)
+
+        deg_min = 180 * psi0 / np.pi
+        deg_max = 180 * (psi0 + dpsi) / np.pi
+
+        u = np.radians(np.r_[deg_min:deg_max + d:d])
+        v = np.radians(np.r_[0:360. + d:d])
+
+        c1 = len(u)
+        c2 = len(v)
+
+        # combination of wireframe points in (q)
+        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c1 * c2, 3)
+
+        for i in range(0, len(arr)):
+            self.g(arr[i], arr[i], self.iparams_arr[index], self.sparams_arr[index],
+                   self.qs_xs[index], use_cuda=False)
+
+        return arr.reshape((c1, c2, 3))

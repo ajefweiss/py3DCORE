@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import math
 import numba
 import numpy as np
 
@@ -83,9 +82,9 @@ def _numba_g(q, iparams, sparams, q_xs, s):
 
     x = np.array([
         0,
-        -(rho_0 + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2)) * np.cos(q1) + rho_0,
-        (rho_0 + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2)) * np.sin(q1),
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * delta]
+        -(rho_0 + q0 * rho_1 * np.cos(q2)) * np.cos(q1) + rho_0,
+        (rho_0 + q0 * rho_1 * np.cos(q2)) * np.sin(q1),
+        q0 * rho_1 * np.sin(q2) * delta]
     )
 
     s[:] = _numba_quaternion_rotate(x, q_xs)
@@ -129,10 +128,9 @@ def _numba_f(s, iparams, sparams, q_sx, q):
             phi += 2 * np.pi
 
     if phi == np.pi / 2 or phi == 3 * np.pi / 2:
-        r = x2 / delta / rho_1 / np.sin(phi) / np.sin(psi / 2)**2
+        r = x2 / delta / rho_1 / np.sin(phi)
     else:
-        r = np.abs((np.sqrt((rho_0 - x0) ** 2 + x1 ** 2) - rho_0) / np.cos(phi) / np.sin(psi / 2)**2
-                   / rho_1)
+        r = np.abs((np.sqrt((rho_0 - x0) ** 2 + x1 ** 2) - rho_0) / np.cos(phi) / rho_1)
 
     q[0] = r
     q[1] = psi
@@ -142,25 +140,21 @@ def _numba_f(s, iparams, sparams, q_sx, q):
 @numba.njit
 def _numba_jac(q0, q1, q2, rho_0, rho_1, delta):
     dr = np.array([
-        -rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.cos(q1),
-        rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.sin(q1),
-        rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * delta
+        -rho_1 * np.cos(q2) * np.cos(q1),
+        rho_1 * np.cos(q2) * np.sin(q1),
+        rho_1 * np.sin(q2) * delta
     ])
 
     dpsi = np.array([
-        rho_0 * np.sin(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 *
-        np.cos(q2) * np.sin(q1) - q0
-        * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.cos(q1),
-        rho_0 * np.cos(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 *
-        np.cos(q2) * np.cos(q1) + q0
-        * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.sin(q1),
-        q0 * rho_1 * delta * np.cos(q1 / 2) * np.sin(q1 / 2) * np.sin(q2)
+        rho_0 * np.sin(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.sin(q1),
+        rho_0 * np.cos(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.cos(q1),
+        0
     ])
 
     dphi = np.array([
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * np.cos(q1),
-        -q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * np.sin(q1),
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * delta
+        q0 * rho_1 * np.sin(q2) * np.cos(q1),
+        -q0 * rho_1 * np.sin(q2) * np.sin(q1),
+        q0 * rho_1 * np.cos(q2) * delta
     ])
 
     return dr, dpsi, dphi

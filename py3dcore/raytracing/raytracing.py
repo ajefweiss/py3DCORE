@@ -9,11 +9,6 @@ import itertools
 import multiprocessing
 import numba
 import numpy as np
-import py3dcore
-
-
-def debug_starmap(func, args):
-    return [func(*arg) for arg in args]
 
 
 class Raytracing(object):
@@ -54,11 +49,13 @@ class Raytracing(object):
         self.q_y = 2 * g_y / (self.nx - 1) * v_n
         self.p_1m = t_n * plane_d - g_x * b_n - g_y * v_n
 
-    def generate_image(self, iparams, t_launch, t_image, density, **kwargs):
+    def generate_image(self, model, iparams, t_launch, t_image, density, **kwargs):
         """Generate raytraced image of the 3DCORE model at a given datetime.
 
         Parameters
         ----------
+        model : Base3DCOREModel
+            3DCORE model class.
         iparams : np.ndarray
             Inital parameters for the 3DCORE model.
         t_launch : datetime.datetime
@@ -83,12 +80,9 @@ class Raytracing(object):
         coords = itertools.product(list(range(self.nx)), list(range(self.ny)))
 
         result = pool.starmap(worker_generate_image,
-                              [(i, j, iparams, t_launch, t_image, step_params, rt_params, density)
+                              [(model, i, j, iparams, t_launch, t_image, step_params, rt_params,
+                                density)
                                for (i, j) in coords])
-
-        # result = debug_starmap(worker_generate_image,
-        #                        [(i, j, iparams, t_launch, t_image, step_params, rt_params, density)
-        #                         for (i, j) in coords])
 
         image = np.zeros((self.nx, self.ny))
 
@@ -98,13 +92,13 @@ class Raytracing(object):
         return image
 
 
-def worker_generate_image(i, j, iparams, t_launch, t_image, step_params, rt_params, density):
+def worker_generate_image(model, i, j, iparams, t_launch, t_image, step_params, rt_params, density):
     step_large, step_small, step_min, step_max = step_params
     e, s, p, q_x, q_y = rt_params
 
     iparams_arr = np.array([iparams], dtype=np.float32)
 
-    model_obj = py3dcore.models.ThinTorusGH3DCOREModel(t_launch, runs=1, use_gpu=False)
+    model_obj = model(t_launch, runs=1, use_gpu=False)
     model_obj.update_iparams(iparams_arr, seed=42)
     model_obj.propagate(t_image)
 
@@ -119,11 +113,11 @@ def worker_generate_image(i, j, iparams, t_launch, t_image, step_params, rt_para
 
     rays_large_qs = np.empty((len(rays_large), 3), dtype=np.float32)
 
-    model_obj.f(rays_large, rays_large_qs, model_obj.iparams_arr, model_obj.sparams_arr,
-                model_obj.qs_sx, use_gpu=False)
+    model_obj.transform_sq(rays_large, rays_large_qs)
 
     # detect if ray is close to 3DCORE structure or the origin (sun)
-    mask = generate_mask(i, j, rays_large, rays_large_qs, step_large, step_large_cnt, rho_0, rho_1)
+    mask = generate_mask(model_obj, i, j, rays_large, rays_large_qs, step_large, step_large_cnt,
+                         rho_0, rho_1)
 
     if mask[0] == -1:
         return i, j, np.nan
@@ -132,6 +126,9 @@ def worker_generate_image(i, j, iparams, t_launch, t_image, step_params, rt_para
 
     arg_first = np.argmax(mask > 0) - 1
     arg_last = len(mask) - np.argmax(mask[::-1] > 0)
+
+    if arg_last == len(mask):
+        arg_last -= 1
 
     # small steps
     step_small_cnt = int((t_steps_large[arg_last] - t_steps_large[arg_first]) // step_small)
@@ -143,8 +140,7 @@ def worker_generate_image(i, j, iparams, t_launch, t_image, step_params, rt_para
 
     rays_small_qs = np.empty((len(rays_small), 3), dtype=np.float32)
 
-    model_obj.f(rays_small, rays_small_qs, model_obj.iparams_arr, model_obj.sparams_arr,
-                model_obj.qs_sx, use_gpu=False)
+    model_obj.transform_sq(rays_small, rays_small_qs)
 
     intensity = integrate_intensity(i, j, rays_small, rays_small_qs, step_small_cnt, rho_0, rho_1,
                                     e, density)
@@ -175,8 +171,8 @@ def rt_rays(rays_arr, t_steps, i, j, rt_params):
     return rays_arr
 
 
-@numba.njit
-def generate_mask(i, j, rays_large, rays_large_qs, step_large, step_large_cnt, rho_0, rho_1):
+def generate_mask(model_obj, i, j, rays_large, rays_large_qs, step_large, step_large_cnt, rho_0,
+                  rho_1):
     mask = np.zeros((len(rays_large)), dtype=np.float32)
 
     fail_flag = False
@@ -192,8 +188,17 @@ def generate_mask(i, j, rays_large, rays_large_qs, step_large, step_large_cnt, r
                 fail_flag = True
                 break
 
+    # compute rays surface points
+    rays_large_qs_surf = np.array(rays_large_qs)
+    rays_large_qs_surf[:, 0] = 1
+
+    rays_large_surf = np.empty_like(rays_large_qs_surf)
+
+    model_obj.transform_qs(rays_large_surf, rays_large_qs_surf)
+
+    for k in range(step_large_cnt):
         # check distance to cme
-        if q0 * rho_1 * np.sin(q1 / 2)**2 < 2 * step_large:
+        if np.linalg.norm(rays_large[k] - rays_large_surf[k]) < 2 * step_large:
             mask[k] = 1
 
     if fail_flag:
@@ -217,7 +222,7 @@ def integrate_intensity(i, j, rays_small, rays_small_qs, step_small_cnt, rho_0, 
             break
 
         # check distance to cme
-        if q0 < 2:
+        if q0 < 3:
             v1 = e - rays_small[k]
             v2 = rays_small[k]
             thomson_cos_sq = np.dot(v1, v2)**2 / np.linalg.norm(v1)**2 * np.linalg.norm(v2)**2

@@ -1,86 +1,4 @@
-# -*- coding: utf-8 -*-
-
-import numpy as np
-
-from py3dcore.base import Toroidal3DCOREModel
-from py3dcore.params import Base3DCOREParameters
-from py3dcore.models.thin_torus_gh.coordinates import g, f
-from py3dcore.models.thin_torus_gh.magfield import h
-from py3dcore.models.thin_torus_gh.propagation import p
-
-
-class ThinTorusGH3DCOREModel(Toroidal3DCOREModel):
-    """Implements the TorusGH3DCOREModel model.
-
-    Extended Summary
-    ================
-        For this specific model there are a total of 14 initial parameters which are as follows:
-        0: t_i          time offset
-        1: lon          longitude
-        2: lat          latitude
-        3: inc          inclination
-        4: diameter     cross section diameter at 1 AU
-        5: delta        cross section aspect ratio
-        6: radius       initial cme radius
-        7: velocity     initial cme velocity
-        8: turns        magnetic field turns over entire flux rope
-        9: m_coeff      magnetic field coefficient needed for some magnetic models
-        10: b           magnetic field strength at center at 1AU
-        11: bg_d        solar wind background drag coefficient
-        12: bg_v        solar wind background speed
-        13: noise       instrument noise
-
-        There are 5 state parameters which are as follows:
-        0: t_t          current time
-        1: v_t          current velocity
-        2: rho_0        torus major radius
-        3: rho_1        torus minor radius
-        4: b            magnetic field strength at center
-    """
-
-    def __init__(self, launch, runs, **kwargs):
-        """Initialize ThinTorusGH3DCOREModel model.
-
-        Parameters
-        ----------
-        launch: datetime.datetime
-            Initial datetime.
-        runs : int
-            Number of parallel model runs.
-
-        Other Parameters
-        ----------------
-        cuda_device: int
-            CUDA device, by default 0.
-        dtype: type
-            Data type, by default np.float32.
-        use_cuda : bool
-            CUDA flag, by default False.
-        """
-        funcs = {
-            "g": g,
-            "f": f,
-            "h": h,
-            "p": p
-        }
-
-        dtype = kwargs.pop("dtype", np.float32)
-
-        parameters = kwargs.pop("parameters", thin_torus_gh_parameters)
-
-        if isinstance(parameters, dict):
-            parameters = Base3DCOREParameters(parameters, dtype=dtype)
-
-        super(ThinTorusGH3DCOREModel, self).__init__(
-            launch, funcs, parameters, sparams_count=5, runs=runs, **kwargs
-        )
-
-    @classmethod
-    def default_parameters(cls):
-        return dict(thin_torus_gh_parameters)
-
-
-thin_torus_gh_parameters = {
+{
     "cme_launch_offset": {
         "index": 0,
         "name": "launch time",
@@ -122,8 +40,8 @@ thin_torus_gh_parameters = {
         "index": 4,
         "name": "diameter",
         "distribution": "uniform",
-        "maximum": .35,
-        "minimum": .05,
+        "maximum": 0.35,
+        "minimum": 0.05,
         "boundary": "continuous",
         "label": "D_{1AU}"
     },
@@ -132,9 +50,9 @@ thin_torus_gh_parameters = {
         "name": "aspect ratio",
         "distribution": "uniform",
         "maximum": 12,
-        "minimum": .5,
+        "minimum": 0.5,
         "boundary": "continuous",
-        "label": "\delta"
+        "label": "\\delta"
     },
     "cme_launch_radius": {
         "index": 6,
@@ -190,7 +108,7 @@ thin_torus_gh_parameters = {
         "maximum": 2,
         "minimum": 0.2,
         "boundary": "continuous",
-        "label": "\gamma"
+        "label": "\\gamma"
     },
     "background_velocity": {
         "index": 12,
@@ -208,6 +126,6 @@ thin_torus_gh_parameters = {
         "maximum": 5,
         "minimum": 0,
         "boundary": "continuous",
-        "label": "\sigma"
+        "label": "\\sigma"
     }
 }

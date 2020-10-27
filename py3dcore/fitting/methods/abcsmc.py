@@ -1,20 +1,17 @@
 # -*- coding: utf-8 -*-
 
-"""smc.py
+"""abcsmc.py
 
 Implementations of a ABC-SMC algorithm for 3DCORE.
 """
 
-import argparse
-import datetime
-import heliosat
 import logging
 import multiprocessing
+import numba
 import numpy as np
 import os
 import pickle
 import py3dcore
-import sys
 import time
 
 from py3dcore._extmath import cholesky
@@ -73,7 +70,7 @@ class ABCSMC(object):
             Dictionary containing parameters to fix to given value.
         """
         logger = logging.getLogger(__name__)
-   
+
         set_params = kwargs.get("set_params", None)
 
         self.t_launch = t_launch
@@ -137,12 +134,8 @@ class ABCSMC(object):
 
         self.t_launch = data["t_launch"]
 
-        if data["model"] == "TorusGH3DCOREModel":
-            self.model = py3dcore.models.TorusGH3DCOREModel
-        elif data["model"] == "ThinTorusGH3DCOREModel":
-            self.model = py3dcore.models.ThinTorusGH3DCOREModel
-        elif data["model"] == "ThinTorusNC3DCOREModel":
-            self.model = py3dcore.models.ThinTorusNC3DCOREModel
+        if data["model"] == "TTGHv1" or data["model"] == "ThinTorusGH3DCOREModel":
+            self.model = py3dcore.models.TTGHv1
         else:
             raise ValueError("model not recognized", data["model"])
 
@@ -204,7 +197,7 @@ class ABCSMC(object):
         kernel_mode = kwargs.get("kernel_mode", "lcm")
         output = kwargs.get("output", None)
         runs = kwargs.get("runs", 16)
-        sub_iter_max= kwargs.get("sub_iter_max", 50)
+        sub_iter_max = kwargs.get("sub_iter_max", 50)
         workers = kwargs.get("workers", 8)
 
         kill_flag = False
@@ -214,7 +207,7 @@ class ABCSMC(object):
         logger = logging.getLogger(__name__)
 
         if len(self.eps_hist) == 0:
-            eps_0 = py3dcore.abc.rmse([np.zeros((1, 3))] * len(self.b_data), self.b_data)[0]
+            eps_0 = rmse([np.zeros((1, 3))] * len(self.b_data), self.b_data)[0]
             self.eps_hist = [eps_0, eps_0 * 0.98]
 
             logger.info("starting abc algorithm, eps_0 = %0.2fnT", self.eps_hist[-1])
@@ -239,7 +232,7 @@ class ABCSMC(object):
                     kernels_lower = cholesky(2 * self.kernels)
             else:
                 kernels_lower = None
-            
+
             sub_iter_i = 0
             boost = 0
 
@@ -258,7 +251,7 @@ class ABCSMC(object):
                 tlens = [len(jp[1]) for jp in _results]
                 tlen = sum(tlens)
 
-                self.particles = np.zeros((tlen, 14), dtype=np.float32)
+                self.particles = np.zeros((tlen, len(self.parameters)), dtype=np.float32)
                 self.epses = np.zeros((tlen, ), dtype=np.float32)
                 self.profiles = np.zeros((tlen, len(self.b_data), 3), dtype=np.float32)
 
@@ -326,7 +319,7 @@ class ABCSMC(object):
             if iter_i > 0:
                 self.weights = np.ones((particles,), dtype=np.float32)
                 self.parameters.weight(self.particles, self.particles_prev, self.weights,
-                                       self.weights_prev, self.kernels, False)
+                                       self.weights_prev, self.kernels)
                 self.weights[np.where(self.weights == np.nan)] = 0
             else:
                 self.weights = np.ones((particles,), dtype=np.float32) / particles
@@ -414,7 +407,7 @@ def abcsmc_worker(iter_i, model, t_launch, t_data, b_data, o_data, mask,  parame
 
     profiles = np.array(model_obj.sim_fields(t_data, o_data))
 
-    error = py3dcore.abc.rmse(profiles, b_data, mask=mask)
+    error = rmse(profiles, b_data, mask=mask)
 
     accept_mask = error < eps
     rej_mask = np.sum(error == np.inf)
@@ -433,3 +426,60 @@ def generate_kernels_lcm(i, particles, kernel_cm_inv):
     cutoff = np.median(distances)
 
     return np.cov(particles[np.where(distances < cutoff)], rowvar=False)
+
+
+def rmse(values, reference, mask=None, use_gpu=False):
+    """Compute RMSE between numerous generated 3DCORE profiles and a reference profile. If a
+    mask is given, profiles that are masked if their values are not non-zero where the filter is
+    set to non-zero.
+
+    Parameters
+    ----------
+    values : Union[list[np.ndarray], list[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
+        List of magnetic field outputs.
+    reference : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
+        Reference magnetic field measurements.
+    mask : np.ndarray, optional
+        Mask array, by default None
+    use_gpu : bool, optional
+        GPU flag, by default False
+    """
+    if use_gpu:
+        raise NotImplementedError
+    else:
+        rmse = np.zeros(len(values[0]))
+
+        if mask is not None:
+            for i in range(len(reference)):
+                _error_rmse(values[i], reference[i], mask[i], rmse)
+
+            rmse = np.sqrt(rmse / len(values))
+
+            mask_arr = np.copy(rmse)
+
+            for i in range(len(reference)):
+                _error_mask(values[i], mask[i], mask_arr)
+
+            return mask_arr
+        else:
+            for i in range(len(reference)):
+                _error_rmse(values[i], reference[i], 1, rmse)
+
+            rmse = np.sqrt(rmse / len(values))
+
+            return rmse
+
+
+@numba.njit
+def _error_mask(values_t, mask, rmse):
+    for i in numba.prange(len(values_t)):
+        _v = np.sum(values_t[i]**2)
+        if (_v > 0 and mask == 0) or (_v == 0 and mask != 0):
+            rmse[i] = np.inf
+
+
+@numba.njit
+def _error_rmse(values_t, ref_t, mask, rmse):
+    for i in numba.prange(len(values_t)):
+        if mask == 1:
+            rmse[i] += np.sum((values_t[i] - ref_t)**2)

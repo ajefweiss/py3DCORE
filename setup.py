@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 setup(
     name="3DCORE",
     packages=find_packages(),
-    version="1.1.2",
+    version="1.1.3",
     author="Andreas J. Weiss",
     author_email="andreas.weiss@oeaw.ac.at",
     description="3D Coronal Rope Ejection Model",

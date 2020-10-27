@@ -56,11 +56,11 @@ def configure_logging(debug=False, logfile=None, verbose=False):
 
 
 def select_model(model):
-    if model.upper() == "THIN_TORUS_GH":
-        return py3dcore.models.thin_torus_gh.ThinTorusGH3DCOREModel
-    elif model.upper() == "THIN_TORUS_NC":
-        return py3dcore.models.thin_torus_nc.ThinTorusNC3DCOREModel
-    elif model.upper() == "TORUS_GH":
-        return py3dcore.models.torus_gh.TorusGH3DCOREModel
+    if model.upper() == "TTGHV1" or model.upper() == "THIN_TORUS_GH":
+        return py3dcore.models.TTGHv1
+    elif model.upper() == "TTGHV2":
+        return py3dcore.models.TTGHv2
+    elif model.upper() == "TTGHV3":
+        return py3dcore.models.TTGHv3
     else:
         raise NotImplementedError("unkown model \"%s\"", model.upper())
