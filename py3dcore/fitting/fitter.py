@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import numpy as np
 import os
 import pickle
 import py3dcore
@@ -133,3 +134,40 @@ class BaseFitter(object):
 
         with open(path, "wb") as fh:
             pickle.dump(data, fh)
+
+    def get_best_fit_index(self, errfunc):
+        N = len(self.particles)
+        model_obj = self.model(self.t_launch, N,
+                               parameters=self.parameters, use_gpu=False)
+
+        model_obj.update_iparams(self.particles)
+        model_obj.iparams_arr[:, -1] = 0
+
+        profiles = np.array(model_obj.sim_fields(self.t_data, self.o_data))
+
+        obsc = np.unique(self.mask, return_counts=True)[1][0] // 2
+
+        if obsc > 1:
+            # compute max error for each observation
+            errors = []
+            dc = 2
+            for i in range(obsc):
+                # get datalength
+                datalen = 0
+
+                for dcc in range(dc, len(self.mask)):
+                    if self.mask[dcc] == 0:
+                        break
+
+                    datalen += 1
+
+                dc += datalen + 2
+
+                obslc = slice(i * (datalen + 2), (i + 1) * (datalen + 2))
+                errors.append(errfunc(profiles[obslc], self.b_data[obslc], mask=self.mask[obslc]))
+
+            error = np.max(errors, axis=0)
+        else:
+            error = errfunc(profiles, self.b_data, mask=self.mask)
+
+        return np.argmin(error)

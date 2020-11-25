@@ -58,7 +58,7 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
     (q0, q1, q2) = (q[0], q[1], q[2])
 
     if q0 <= 1 or bounded is False:
-        (t_i, _, _, _, delta, w, _, _, _, turns, _, _, _, _, _, noise) = iparams
+        (t_i, _, _, _, _, w, delta, _, _, turns, _, _, _, _, _, noise) = iparams
         (_, _, rho_0, rho_1, b_t) = sparams
 
         # get normal vectors

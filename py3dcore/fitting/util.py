@@ -5,29 +5,38 @@
 Utility function for fitting results.
 """
 
+import heliosat
 import numpy as np
+import py3dcore
 
 
-def estimate_mode(iparams_arr, weights, bin_density=250):
-    samples, params = iparams_arr.shape
+def generate_ensemble(path, ts, satellite, frame, return_spread=True):
+    obj = py3dcore.fitting.BaseFitter()
+    obj.load(path)
 
-    mode = np.empty((params,))
+    model_obj = obj.model(obj.t_launch, runs=len(obj.particles), use_gpu=False)
+    model_obj.update_iparams(obj.particles, seed=142)
 
-    for i in range(params):
-        if np.std(iparams_arr[:, i]) < 1e-8:
-            mode[i] = iparams_arr[0, i]
-            continue
+    sat = heliosat.satellites.select_satellite(satellite)()
 
-        hist_counts, hist_edges = np.histogram(iparams_arr[:, i], weights=weights,
-                                               bins=samples // bin_density)
+    ensemble = np.squeeze(np.array(model_obj.sim_fields(ts, sat.trajectory(ts, frame="HCI"))))
 
-        argmax = np.argmax(hist_counts)
+    ensemble = heliosat.coordinates.transform_pos(ts, ensemble, "HCI", frame)
+    ensemble[np.where(ensemble == 0)] = np.nan
 
-        if argmax == 0:
-            mode[i] = hist_edges[0] // 2
-        elif argmax == len(hist_counts) - 1:
-            mode[i] = hist_edges[-1]
-        else:
-            mode[i] = (hist_edges[argmax] + hist_edges[argmax - 1]) / 2
+    # generate quantiles
+    b_m = np.nanmean(ensemble, axis=1)
 
-    return mode
+    b_s2p = np.nanquantile(ensemble, 0.5 + 0.95 / 2, axis=1)
+    b_s2n = np.nanquantile(ensemble, 0.5 - 0.95 / 2, axis=1)
+
+    b_t = np.sqrt(np.sum(ensemble**2, axis=2))
+    b_tm = np.nanmean(b_t, axis=1)
+
+    b_ts2p = np.nanquantile(b_t, 0.5 + 0.95 / 2, axis=1)
+    b_ts2n = np.nanquantile(b_t, 0.5 - 0.95 / 2, axis=1)
+
+    if return_spread:
+        return b_m, b_tm, (b_s2p, b_s2n), (b_ts2p, b_ts2n)
+    else:
+        return b_m, b_tm
