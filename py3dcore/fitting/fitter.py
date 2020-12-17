@@ -12,37 +12,31 @@ from py3dcore.util import select_model
 class BaseFitter(object):
     """Base 3DCORE fitting class.
     """
-    t_data = []
-    b_data = []
-    o_data = []
-    mask = []
-
-    name = None
-
     def __init__(self):
-        pass
+        self.name = None
+        self.observers = []
 
-    def add_observation(self, t_data, b_data, o_data):
+    def add_observer(self, observer, t, t_s, t_e, dt=0, dd=1, dti=0):
         """Add magnetic field observation
 
         Parameters
         ----------
-        t_data : np.ndarray
-            Time evaluation array.
-        b_data : np.ndarray
-            Magnetic field array.
-        o_data : np.ndarray
-            Observer position array.
+        observer : heliosat.Spacecraft
+            Observer object.
+        t : np.ndarray
+            Observer datetimes.
+        t_s : np.ndarray
+            Start marker.
+        t_e : np.ndarray
+            End marker.
+        dt : float
+            Market offset (in hours), by default 0,
+        dd : int
+            Marker offset reduction (in hours) per iteration, by default 1.
+        ddi : int
+            Marker tightening offset, by default 0.
         """
-        self.t_data.extend(t_data)
-        self.b_data.extend(b_data)
-        self.o_data.extend(o_data)
-
-        _mask = [1] * len(b_data)
-        _mask[0] = 0
-        _mask[-1] = 0
-
-        self.mask.extend(_mask)
+        self.observers.append([observer, t, t_s, t_e, dt, dd, dti])
 
     def init(self, t_launch, model, **kwargs):
         """Fitter initialization.
@@ -68,7 +62,8 @@ class BaseFitter(object):
         self.t_launch = t_launch
         self.model = model
         self.parameters = py3dcore.params.Base3DCOREParameters(
-            model.default_parameters())
+            model.default_parameters()
+        )
         self.seed = kwargs.get("seed", 42)
 
         # fix parameters
@@ -113,6 +108,7 @@ class BaseFitter(object):
             setattr(self, attr, data[attr])
 
         self.model = select_model(self.model)
+        self.name = os.path.basename(path)
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
@@ -135,39 +131,36 @@ class BaseFitter(object):
         with open(path, "wb") as fh:
             pickle.dump(data, fh)
 
-    def get_best_fit_index(self, errfunc):
-        N = len(self.particles)
-        model_obj = self.model(self.t_launch, N,
-                               parameters=self.parameters, use_gpu=False)
+    def param_fix(self, param, value):
+        """Set param to fixed value.
 
-        model_obj.update_iparams(self.particles)
-        model_obj.iparams_arr[:, -1] = 0
+        Parameters
+        ----------
+        param : str
+            Parameter name.
+        value : float
+            Parameter value.
+        """
+        self.parameters.params_dict[param]["distribution"] = "fixed"
+        self.parameters.params_dict[param]["fixed_value"] = value
 
-        profiles = np.array(model_obj.sim_fields(self.t_data, self.o_data))
+        self.parameters._update_arr()
 
-        obsc = np.unique(self.mask, return_counts=True)[1][0] // 2
+    def param_minmax(self, param, minv, maxv):
+        """Set param min/max values. If None, the value stays unchanged.
 
-        if obsc > 1:
-            # compute max error for each observation
-            errors = []
-            dc = 2
-            for i in range(obsc):
-                # get datalength
-                datalen = 0
+        Parameters
+        ----------
+        param : str
+            Parameter name.
+        value : float
+            Parameter value.
+        """
+        if minv:
+            self.parameters.params_dict[param]["minimum"] = minv
 
-                for dcc in range(dc, len(self.mask)):
-                    if self.mask[dcc] == 0:
-                        break
+        if maxv:
+            self.parameters.params_dict[param]["maximum"] = maxv
 
-                    datalen += 1
+        self.parameters._update_arr()
 
-                dc += datalen + 2
-
-                obslc = slice(i * (datalen + 2), (i + 1) * (datalen + 2))
-                errors.append(errfunc(profiles[obslc], self.b_data[obslc], mask=self.mask[obslc]))
-
-            error = np.max(errors, axis=0)
-        else:
-            error = errfunc(profiles, self.b_data, mask=self.mask)
-
-        return np.argmin(error)

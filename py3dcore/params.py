@@ -428,7 +428,7 @@ def _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower, 
             if r <= 0:
                 si = j
                 break
-
+        #print("selected candidate ", si)
         # draw candidates until a candidate is within the valid range
         c = 0
         Nc = 25
@@ -436,19 +436,26 @@ def _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower, 
         perturbations = np.dot(kernels_lower[si], np.random.randn(len(particles[si]), Nc))
 
         while True:
+            #print("iter ", c)
+
             candidate = particles[si] + perturbations[:, c]
+            #print(candidate)
+            #print(bound_arr)
             accepted = True
 
             for k in range(len(candidate)):
+                #print("cand k ", k)
                 if candidate[k] > maxv_arr[k]:
                     if bound_arr[k] == 0:
                         accepted = False
-
+                        #print("out of bounds")
                         break
                     elif bound_arr[k] == 1:
                         while candidate[k] > maxv_arr[k]:
                             candidate[k] = minv_arr[k] + candidate[k] - maxv_arr[k]
+                            #print("redrawing")
                     else:
+                        #print("error raise?")
                         raise NotImplementedError
 
                 if candidate[k] < minv_arr[k]:
@@ -460,6 +467,7 @@ def _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower, 
                         while candidate[k] < minv_arr[k]:
                             candidate[k] = maxv_arr[k] + candidate[k] - minv_arr[k]
                     else:
+                        #print("error raise?")
                         raise NotImplementedError
 
             if accepted:
@@ -470,7 +478,8 @@ def _numba_perturb_with_kernels(iparams_arr, particles, weights, kernels_lower, 
             if c >= Nc - 1:
                 c = 0
                 perturbations = np.dot(kernels_lower[si], np.random.randn(len(particles[si]), Nc))
-
+                #print("bad drawing")
+        #print("saving candidate")
         iparams_arr[i] = candidate
 
 

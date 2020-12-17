@@ -205,15 +205,15 @@ class ABCSMC(object):
 
         if len(self.eps_hist) == 0:
             eps_0 = rmse([np.zeros((1, 3))] * len(self.b_data), self.b_data)[0]
-            self.eps_hist = [eps_0, eps_0 * 0.98]
+            self.eps_hist = [2 * eps_0, 2 * eps_0 * 0.98]
 
             logger.info("starting abc algorithm, eps_0 = %0.2fnT", self.eps_hist[-1])
 
         for iter_i in range(self.iter_i, iter_end):
-            logger.info("starting iteration %i", iter_i)
+            #logger.info("starting iteration %i", iter_i)
 
             timer_iter = time.time()
-
+            #logger.info("cholesky stuff")
             if iter_i > 0:
                 # switch particles/particles_prev
                 _tp = self.particles_prev
@@ -232,7 +232,7 @@ class ABCSMC(object):
 
             sub_iter_i = 0
             boost = 0
-
+            logger.info("particles stuff")
             rseed = self.seed + 100000 * iter_i
             _results = pool.starmap(abcsmc_worker, [(iter_i, self.model, self.t_launch,
                                                      self.t_data, self.b_data, self.o_data,

@@ -10,18 +10,24 @@ import numpy as np
 import py3dcore
 
 
-def generate_ensemble(path, ts, satellite, frame, return_spread=True):
+def generate_ensemble(path, ts, satellite, frame, return_spread=True, remove_noise=False):
     obj = py3dcore.fitting.BaseFitter()
     obj.load(path)
 
     model_obj = obj.model(obj.t_launch, runs=len(obj.particles), use_gpu=False)
+
+    if remove_noise:
+        obj.particles[:, -1] = 0
+
     model_obj.update_iparams(obj.particles, seed=142)
 
     sat = heliosat.satellites.select_satellite(satellite)()
 
     ensemble = np.squeeze(np.array(model_obj.sim_fields(ts, sat.trajectory(ts, frame="HCI"))))
 
-    ensemble = heliosat.coordinates.transform_pos(ts, ensemble, "HCI", frame)
+    if frame != "HCI":
+        ensemble = heliosat.coordinates.transform_pos(ts, ensemble, "HCI", frame)
+
     ensemble[np.where(ensemble == 0)] = np.nan
 
     # generate quantiles

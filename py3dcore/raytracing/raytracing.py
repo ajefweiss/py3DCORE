@@ -70,7 +70,7 @@ class Raytracing(object):
         np.ndarray
             RT image.
         """
-        pool = multiprocessing.Pool(multiprocessing.cpu_count() * 2)
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
 
         step_params = (kwargs.get("step_large", 0.05), kwargs.get("step_small", .0005),
                        kwargs.get("step_min", 0), kwargs.get("step_max", 2))
@@ -93,10 +93,12 @@ class Raytracing(object):
 
 
 def worker_generate_image(model, i, j, iparams, t_launch, t_image, step_params, rt_params, density):
+    if i % 16 == 0 and j == 0:
+        print("tracing line", i)
     step_large, step_small, step_min, step_max = step_params
     e, s, p, q_x, q_y = rt_params
 
-    iparams_arr = np.array([iparams], dtype=np.float32)
+    iparams_arr = iparams.reshape(1, -1)
 
     model_obj = model(t_launch, runs=1, use_gpu=False)
     model_obj.update_iparams(iparams_arr, seed=42)

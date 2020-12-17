@@ -196,6 +196,8 @@ class ABCSMC_PSD(object):
             Maximum number of sub iterations, by default 50.
         workers : int
             Number of parallel workers, by default 8.
+        toffset : float
+            T marker offsets in hours, by default None.
         """
         eps_quantile = kwargs.get("eps_quantile", .5)
         jobs = kwargs.get("jobs", 8)
@@ -204,6 +206,7 @@ class ABCSMC_PSD(object):
         runs = kwargs.get("runs", 16)
         sub_iter_max = kwargs.get("sub_iter_max", 50)
         workers = kwargs.get("workers", 8)
+        toff = kwargs.get("toffset", None)
 
         kill_flag = False
 
@@ -213,7 +216,7 @@ class ABCSMC_PSD(object):
 
         if len(self.eps_hist) == 0:
             eps_0 = rmse([np.zeros((1, 3))] * len(self.b_data), self.b_data)[0]
-            self.eps_hist = [eps_0, eps_0 * 0.98]
+            self.eps_hist = [2 * eps_0, 2 * eps_0 * 0.98]
 
             logger.info("starting abc algorithm, eps_0 = %0.2fnT", self.eps_hist[-1])
 
@@ -406,7 +409,7 @@ def abcsmc_worker(iter_i, model, t_launch, t_data, b_data, o_data, b_fft, mask,
                   parameters, eps, seed, particles, weights, kernels_lower, runs, boost, logger):
     model_obj = model(t_launch, int(2**(runs + boost)),
                       parameters=parameters, use_gpu=False)
-
+    #logger.info("starting worker")
     if iter_i == 0:
         model_obj.generate_iparams(seed=seed)
     else:
@@ -414,6 +417,7 @@ def abcsmc_worker(iter_i, model, t_launch, t_data, b_data, o_data, b_fft, mask,
         model_obj.perturb_iparams(particles, weights, kernels_lower)
 
     profiles = np.array(model_obj.sim_fields(t_data, o_data))
+    #logger.info("generated profiles")
 
     # generate PSD fluctuations for each component and observation
     obsc = len(b_fft)

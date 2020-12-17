@@ -53,14 +53,17 @@ def configure_logging(debug=False, logfile=None, verbose=False):
     # disable annoying loggers
     logging.getLogger("numba.byteflow").setLevel("WARNING")
     logging.getLogger("numba.cuda.cudadrv.driver").setLevel("WARNING")
+    logging.getLogger("numba.interpreter").setLevel("WARNING")
 
 
 def select_model(model):
-    if model.upper() == "TTGHV1" or model.upper() == "THIN_TORUS_GH":
+    if model.upper() == "TTGHV1" or model.upper() == "THIN_TORUS_GH" or model.upper() == "THINTORUSGH3DCOREMODEL":
         return py3dcore.models.TTGHv1
     elif model.upper() == "TTGHV2":
         return py3dcore.models.TTGHv2
     elif model.upper() == "TTGHV3":
         return py3dcore.models.TTGHv3
+    elif model.upper() == "TTNCV2":
+        return py3dcore.models.TTNCv2
     else:
         raise NotImplementedError("unkown model \"%s\"", model.upper())

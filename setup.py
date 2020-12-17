@@ -20,6 +20,7 @@ setup(
         "heliosat",
         "numba",
         "numpy",
+        "scipy",
         "spiceypy"
     ],
     classifiers=[
