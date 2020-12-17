@@ -212,7 +212,7 @@ class Base3DCOREModel(object):
         else:
             for i in range(len(sparams)):
                 sparam = sparams[i]
-                sparams_out[i] = self.sparams_arr[:, sparam]
+                sparams_out[i] = self.sparams_arr[i, sparam]
 
     def sim_fields(self, *args, **kwargs):
         """Legacy dummy for simulate
