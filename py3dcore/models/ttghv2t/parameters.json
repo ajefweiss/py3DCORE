@@ -84,14 +84,14 @@
         "boundary": "continuous",
         "label": "V_0"
     },
-    "magnetic_field_twist": {
+    "t_factor": {
         "index": 9,
-        "name": "magnetic twist",
+        "name": "t factor",
         "distribution": "uniform",
-        "maximum": 25,
-        "minimum": -25,
+        "maximum": 250,
+        "minimum": -250,
         "boundary": "continuous",
-        "label": "\\tau"
+        "label": "T"
     },
     "cme_expansion_rate": {
         "index": 10,

@@ -91,7 +91,7 @@
         "maximum": 25,
         "minimum": -25,
         "boundary": "continuous",
-        "label": "\\tau"
+        "label": "C_{10}"
     },
     "cme_expansion_rate": {
         "index": 10,

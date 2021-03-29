@@ -18,7 +18,7 @@ import time
 from py3dcore._extmath import cholesky
 from py3dcore._extnumba import set_random_seed
 from py3dcore.fitting import BaseFitter
-from py3dcore.fitting.methods.summary import rmse
+from py3dcore.fitting.methods.summary import sumstat
 from py3dcore.params import _numba_calculate_weights_reduce
 from scipy.signal import detrend, welch
 
@@ -110,9 +110,10 @@ class ABCSMC_v1(BaseFitter):
         output = kwargs.get("output", None)
         runs = kwargs.get("runs", 16)
         sampling_freq = kwargs.get("sampling_freq", 300)
-        sub_iter_max = kwargs.get("sub_iter_max", 50)
+        sub_iter_max = kwargs.get("sub_iter_max", 10)
         summary = kwargs.get("summary", "rmse")
         workers = kwargs.get("workers", 8)
+        data_kwargs = kwargs.get("data_kwargs", {})
 
         kill_flag = False
 
@@ -137,7 +138,7 @@ class ABCSMC_v1(BaseFitter):
                 obs_inst = observer()
 
                 _, _f_rawd = obs_inst.get_data([t[0], t[-1]], "mag", cache=True, frame=frame,
-                                               sampling_freq=sampling_freq)
+                                               sampling_freq=sampling_freq, **data_kwargs)
 
                 # fix for NaN values
                 nanc = np.sum(np.isnan(_f_rawd))
@@ -182,6 +183,7 @@ class ABCSMC_v1(BaseFitter):
                 f_data_all.append(w_data)
 
         # main loop
+        tlen = 0
         for iter_i in range(self.iter_i, iter_end):
             logger.info("starting iteration %i", iter_i)
 
@@ -209,20 +211,20 @@ class ABCSMC_v1(BaseFitter):
             m_data_all = []
 
             # generate t/b/o/m data
+            dls = []
             for i in range(len(self.observers)):
                 observer, t, t_s, t_e, dt, dd, dti = self.observers[i]
 
                 obs_inst = observer()
                 
-                _, _b_data = obs_inst.get_data(t, "mag", cache=True, frame=frame)
+                _, _b_data = obs_inst.get_data(t, "mag", cache=True, frame=frame, **data_kwargs)
 
                 if iter_i > dti:
                     dtf = max([0, dt - dd * (iter_i - dti)])
                 else:
                     dtf = dt
 
-                if dtf > 0:
-                    logger.info("obs %i marker offset set to %0.1f hours", i, dtf)
+                logger.info("obs %i marker offset set to %0.1f hours", i, dtf)
 
                 t_data = [t_s - datetime.timedelta(hours=dtf)]
                 t_data.extend(t)
@@ -232,6 +234,8 @@ class ABCSMC_v1(BaseFitter):
 
                 b_data = np.zeros((len(_b_data) + 2, 3))
                 b_data[1:-1] = _b_data
+
+                dls.append(len(_b_data))
 
                 m_data = [1] * len(b_data)
                 m_data[0] = 0
@@ -243,15 +247,16 @@ class ABCSMC_v1(BaseFitter):
                 m_data_all.extend(m_data)
 
             if len(self.eps_hist) == 0:
-                if summary == "rmse":
-                    sumstat = rmse
-                else:
-                    raise NotImplementedError
-
-                eps_0 = sumstat([np.zeros((1, 3))] * len(b_data_all), b_data_all)[0]
+                eps_0 = sumstat([np.zeros((1, 3))] * len(b_data_all), b_data_all, stype=summary, obsc=len(self.observers), dls=dls)[0]
                 self.eps_hist = [eps_imul * eps_0, eps_imul * eps_0 * 0.98]
 
-                logger.info("initial eps_0 = %0.2fnT", self.eps_hist[-1])
+                if len(eps_0) > 1:
+                    self.eps_dim = len(eps_0)
+                else:
+                    self.eps_dim = 1
+
+                logger.info("initial eps_0 = %s", self.eps_hist[-1])
+                logger.info("eps dim = %i", self.eps_dim)
 
             sub_iter_i = 0
             boost = 0
@@ -272,18 +277,20 @@ class ABCSMC_v1(BaseFitter):
             # perform additional runs if insufficient particles are collected
             while True:
                 tlens = [len(jp[1]) for jp in _results]
-                tlen = sum(tlens)
+                _tlen = sum(tlens)
+                dtlens = _tlen - tlen
+                tlen = _tlen
+                
 
                 self.particles = np.zeros((tlen, len(self.parameters)), dtype=np.float32)
-                self.epses = np.zeros((tlen, ), dtype=np.float32)
+                self.epses = np.zeros((tlen, self.eps_dim), dtype=np.float32)
                 self.profiles = np.zeros((tlen, len(b_data_all), 3), dtype=np.float32)
 
                 acc_rej = np.array([0, 0, 0])
 
                 for i in range(0, len(_results)):
                     self.particles[sum(tlens[:i]):sum(tlens[:i + 1])] = _results[i][0]
-                    self.epses[sum(tlens[:i]):sum(
-                        tlens[:i + 1])] = _results[i][1]
+                    self.epses[sum(tlens[:i]):sum(tlens[:i + 1])] = _results[i][1]
                     self.profiles[sum(tlens[:i]):sum(tlens[:i + 1])] = _results[i][2]
 
                     acc_rej += _results[i][3]
@@ -319,13 +326,19 @@ class ABCSMC_v1(BaseFitter):
                 total_runs += jobs * int(2**(runs+boost))
 
                 # kill conditions
-                if sub_iter_i == 5 + boost:
-                    if tlen * np.floor(sub_iter_max / 5) < particles:
+                if sub_iter_i == 2 and iter_i > 0:
+                    if dtlens * (sub_iter_max - 2) + tlen < particles:
+                        print(dtlens, sub_iter_max - 2, tlen)
                         logger.warning("expected to exceed maximum number of sub iterations (%i)",
                                        sub_iter_max)
                         logger.warning("aborting")
                         kill_flag = True
                         break
+                
+                if tlen == 0:
+                    logger.warning("no hits, aborting")
+                    kill_flag = True
+                    break
 
             if kill_flag:
                 break
@@ -337,6 +350,20 @@ class ABCSMC_v1(BaseFitter):
                 self.particles = self.particles[:particles]
                 self.epses = self.epses[:particles]
 
+            # reshuffle
+            if iter_i == 0:
+                for k, v in self.parameters.params_dict.items():
+                    if v.get("reshuffle", False):
+                        logger.info("reshuffling %s parameters", k)
+
+                        # generate iparams
+                        model_obj = self.model(self.t_launch, particles, parameters=self.parameters, use_gpu=False)
+                        model_obj.generate_iparams(seed=10000 * sub_iter_max  * sub_iter_i + self.seed)
+
+                        self.particles[:, v["index"]] = model_obj.iparams_arr[:, v["index"]]
+
+
+
             if iter_i > 0:
                 self.weights = np.ones((particles,), dtype=np.float32)
                 self.parameters.weight(self.particles, self.particles_prev, self.weights,
@@ -346,9 +373,19 @@ class ABCSMC_v1(BaseFitter):
                 self.weights = np.ones((particles,), dtype=np.float32) / particles
 
             # set new eps
-            self.eps_hist.append(np.quantile(self.epses, eps_quantile))
+            
 
-            logger.info("setting new eps: %.3f => %.3f", self.eps_hist[-2], self.eps_hist[-1])
+            if isinstance(eps_quantile, float):
+                self.eps_hist.append(np.quantile(self.epses, eps_quantile, axis=0))
+            elif isinstance(eps_quantile, list) or isinstance(eps_quantile, np.ndarray):
+                eps_quantile_eff = eps_quantile ** (1 / self.eps_dim)
+                _k = len(eps_quantile_eff)
+
+                self.eps_hist.append(
+                    np.array([np.quantile(self.epses, eps_quantile_eff[i], axis=0)[i] for i in range(_k)])
+                    )
+
+            logger.info("setting new eps: %s => %s", self.eps_hist[-2], self.eps_hist[-1])
 
             # compute transition kernels
             if kernel_mode == "cm":
@@ -399,14 +436,10 @@ def abcsmc_worker(*args):
 
     profiles = np.array(model_obj.sim_fields(t_data_all, o_data_all))
 
-    if summary == "rmse":
-        sumstat = rmse
-    else:
-        raise NotImplementedError
-
     if noise_mode == "psd":
         # generate PSD fluctuations
         obsc = len(f_data_all)
+        dls = []
 
         for c in range(3):
             _off = 0
@@ -427,16 +460,26 @@ def abcsmc_worker(*args):
 
                 _off += dl + 2
 
-        error = sumstat(profiles, b_data_all, mask=m_data_all)
+                if c == 0:
+                    dls.append(dl)
+
+        error = sumstat(profiles, b_data_all, mask=m_data_all, stype=summary, obsc=obsc, dls=dls)
     else:
-        error = sumstat(profiles, b_data_all, mask=m_data_all)
+        error = sumstat(profiles, b_data_all, mask=m_data_all, stype=summary)
 
+    if error.ndim == 1:
+        accept_mask = error < eps_last
 
-    accept_mask = error < eps_last
-    rej_mask = np.sum(error == np.inf)
-
-    rej_error = np.sum((error != np.inf) & (error >= eps_last))
-    acc_count = np.sum(accept_mask)
+        rej_mask = np.sum(error == np.inf)
+        rej_error = np.sum((error != np.inf) & (error >= eps_last))
+        acc_count = np.sum(accept_mask)
+    elif error.ndim == 2:
+        accept_mask = np.all(error < eps_last, axis=1)
+        rej_mask = 0#np.sum(error == np.inf)
+        rej_error = 0#np.sum((error != np.inf) & (error >= eps_last))
+        acc_count = np.sum(accept_mask)
+    else:
+        raise IndexError
 
     return model_obj.iparams_arr[accept_mask], error[accept_mask], \
         np.swapaxes(profiles, 0, 1)[accept_mask], \

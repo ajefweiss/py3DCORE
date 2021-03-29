@@ -146,7 +146,7 @@ class BaseFitter(object):
 
         self.parameters._update_arr()
 
-    def param_minmax(self, param, minv, maxv):
+    def param_minmax(self, param, minv, maxv, **kwargs):
         """Set param min/max values. If None, the value stays unchanged.
 
         Parameters
@@ -156,11 +156,14 @@ class BaseFitter(object):
         value : float
             Parameter value.
         """
-        if minv:
+        if minv is not None:
             self.parameters.params_dict[param]["minimum"] = minv
 
-        if maxv:
+        if maxv is not None:
             self.parameters.params_dict[param]["maximum"] = maxv
+
+        for k, v in kwargs.items():
+            self.parameters.params_dict[param][k] = v
 
         self.parameters._update_arr()
 

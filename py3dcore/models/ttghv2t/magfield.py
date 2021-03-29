@@ -3,7 +3,7 @@
 import numpy as np
 
 from numba import guvectorize
-from py3dcore.models.ttncv2.coordinates import _numba_jac
+from py3dcore.models.ttghv2.coordinates import _numba_jac
 from py3dcore.rotqs import _numba_quaternion_rotate
 
 
@@ -58,7 +58,7 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
     (q0, q1, q2) = (q[0], q[1], q[2])
 
     if q0 <= 1 or bounded is False:
-        (t_i, _, _, _, _, w, delta, _, _, turns, _, _, _, _, _, noise) = iparams
+        (t_i, _, _, _, _, w, delta, _, _, Tfac, _, _, _, _, _, noise) = iparams
         (_, _, rho_0, rho_1, b_t) = sparams
 
         # get normal vectors
@@ -75,18 +75,18 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
         fluxfactor = 1 / np.sin(q1 / 2)**2
 
-        hand = turns / np.abs(turns)
-        turns = np.abs(turns)
-        dinv = 1 / delta
-        b_10 = b_t * delta * 2
-
-        #h = (delta - 1)**2 / (1 + delta)**2
-        #E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
+        h = (delta - 1)**2 / (1 + delta)**2
+        E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
         #t = turns * rho_1 / rho_0 * E / 2 / np.pi * np.sin(q1 / 2)**2
+        t = Tfac * rho_1 / rho_0 / 2 / np.pi * np.sin(q1 / 2)**2
 
-        bpsi = dinv * b_10 * (2 - q0**2) * fluxfactor
-        bphi = 2 * dinv * hand * b_10 * q0 / (dinv**2 + 1) / turns * fluxfactor
+        # twist correction factor for w
+        w_fac = 1 / 1 + q0 * rho_1 / rho_0 * (w - 1) * np.sin(q1)**2
+
+        denom = (1 + t**2 * q0**2)
+        bpsi = b_t / denom * fluxfactor
+        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor * w_fac
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi

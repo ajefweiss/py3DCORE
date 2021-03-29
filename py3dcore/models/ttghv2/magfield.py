@@ -80,9 +80,12 @@ def _numba_h(q, iparams, sparams, q_xs, bounded, b):
 
         t = turns * rho_1 / rho_0 * E / 2 / np.pi * np.sin(q1 / 2)**2
 
+        # twist correction factor for w
+        w_fac = 1 / 1 + q0 * rho_1 / rho_0 * (w - 1) * np.sin(q1)**2
+
         denom = (1 + t**2 * q0**2)
         bpsi = b_t / denom * fluxfactor
-        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
+        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor * w_fac
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi

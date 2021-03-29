@@ -61,6 +61,8 @@ def select_model(model):
         return py3dcore.models.TTGHv1
     elif model.upper() == "TTGHV2":
         return py3dcore.models.TTGHv2
+    elif model.upper() == "TTGHV2T":
+        return py3dcore.models.TTGHv2T
     elif model.upper() == "TTGHV3":
         return py3dcore.models.TTGHv3
     elif model.upper() == "TTNCV2":
