@@ -9,58 +9,39 @@ import numba
 import numpy as np
 
 from numba import guvectorize
+from typing import Optional, Iterable
 
 
-def generate_quaternions(iparams_arr, qs_sx, qs_xs, use_cuda=False, indices=None):
-    """Wrapper function for generating rotational quaternions from iparams array.
-
-    Parameters
-    ----------
-    iparams_arr : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-        Initial parameters array.
-    qs_sx : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-        Array for (s) -> (x) rotational quaternions.
-    qs_xs : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-        Array for (x) -> (s) rotational quaternions.
-    use_cuda : bool
-        CUDA flag, by default False.
-    indices : np.ndarray, optional
-        Lon/Lat/Inc indices in params, by default None.
-    """
+def generate_quaternions(arr: np.ndarray, qs_sx: np.ndarray, qs_xs: np.ndarray, indices: Optional[Iterable] = None) -> None:
     if indices is None:
+        # assume by default that propagation direction is stored in indices 1, 2 and 3
         indices = np.array([1, 2, 3])
     else:
         indices = np.array(indices)
 
-    if use_cuda:
-        raise NotImplementedError("CUDA functionality is not available yet")
-    else:
-        (i1, i2, i3) = (indices[0], indices[1], indices[2])
-        (lon, lat, inc) = (iparams_arr[:, i1], iparams_arr[:, i2], iparams_arr[:, i3])
+    (i1, i2, i3) = (indices[0], indices[1], indices[2]) # type: ignore
+    (lon, lat, inc) = (arr[:, i1], arr[:, i2], arr[:, i3])
 
-        ux = np.array([0, 1.0, 0, 0])
-        uy = np.array([0, 0, 1.0, 0])
-        uz = np.array([0, 0, 0, 1.0])
+    # generate standard axes vectors
+    ux = np.array([0, 1.0, 0, 0])
+    uy = np.array([0, 0, 1.0, 0])
+    uz = np.array([0, 0, 0, 1.0])
 
-        rlon = _numba_quaternion_create(lon, uz)
-        rlat = _numba_quaternion_create(-lat, quaternion_rotate(uy, rlon))
-        rinc = _numba_quaternion_create(
-            inc, quaternion_rotate(ux, _numba_quaternion_multiply(rlat, rlon)))
+    rlon = _numba_quaternion_create(lon, uz)
+    rlat = _numba_quaternion_create(-lat, quaternion_rotate(uy, rlon))
+    rinc = _numba_quaternion_create(
+        inc, quaternion_rotate(ux, _numba_quaternion_multiply(rlat, rlon)))
 
-        _numba_quaternion_multiply(rinc, _numba_quaternion_multiply(rlat, rlon), qs_xs)
-        _numba_quaternion_conjugate(qs_xs, qs_sx)
+    _numba_quaternion_multiply(rinc, _numba_quaternion_multiply(rlat, rlon), qs_xs)
+    _numba_quaternion_conjugate(qs_xs, qs_sx)
 
 
-def quaternion_rotate(vec, q, use_cuda=False):
-    if use_cuda:
-        raise NotImplementedError("CUDA functionality is not available yet")
-    else:
-        return _numba_quaternion_multiply(
-            q, _numba_quaternion_multiply(vec, _numba_quaternion_conjugate(q)))
+def quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
+    return _numba_quaternion_multiply(q, _numba_quaternion_multiply(vec, _numba_quaternion_conjugate(q)))
 
 
 @numba.njit
-def _numba_quaternion_rotate(vec, q):
+def _numba_quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
     qh = (q[0], -q[1], -q[2], -q[3])
 
     # mul 1
@@ -81,7 +62,7 @@ def _numba_quaternion_rotate(vec, q):
     "void(float32, float32[:], float32[:])",
     "void(float64, float64[:], float64[:])"],
     '(), (n) -> (n)')
-def _numba_quaternion_create(rot, vec, res):
+def _numba_quaternion_create(rot: np.ndarray, vec: np.ndarray, res: np.ndarray) -> None:
     argument = np.radians(rot / 2)
 
     res[0] = np.cos(argument)
@@ -96,7 +77,7 @@ def _numba_quaternion_create(rot, vec, res):
     "void(float32[:], float32[:])",
     "void(float64[:], float64[:])"],
     '(n) -> (n)')
-def _numba_quaternion_conjugate(q, res):
+def _numba_quaternion_conjugate(q: np.ndarray, res: np.ndarray) -> None:
     res[0] = q[0]
     res[1:] = -q[1:]
 
@@ -105,7 +86,7 @@ def _numba_quaternion_conjugate(q, res):
     "void(float32[:], float32[:], float32[:])",
     "void(float64[:], float64[:], float64[:])"],
     '(n), (n) -> (n)')
-def _numba_quaternion_multiply(q1, q2, res):
+def _numba_quaternion_multiply(q1: np.ndarray, q2: np.ndarray, res: np.ndarray) -> None:
     (q1a, q1b, q1c, q1d) = (q1[0], q1[1], q1[2], q1[3])
     (q2a, q2b, q2c, q2d) = (q2[0], q2[1], q2[2], q2[3])
 

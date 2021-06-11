@@ -1,554 +1,303 @@
 # -*- coding: utf-8 -*-
 
-"""base.py
-
-Implements the base 3DCORE model classes.
+"""model.py
 """
 
+import datetime
 import logging
-import numba.cuda as cuda
+import numba
 import numpy as np
+import scipy as sp
 
-from itertools import product
-from numba.cuda.random import create_xoroshiro128p_states as cxoro128p
-from scipy.optimize import least_squares
-
-from py3dcore._extnumba import set_random_seed
-from py3dcore.rotqs import generate_quaternions
+from .rotqs import generate_quaternions
+from .util import cholesky, set_random_seed
+from heliosat.util import sanitize_dt
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 
-class Base3DCOREModel(object):
-    """Base 3DCORE model class.
+class SimulationBlackBox(object):
+    """SimulationBlackBox class.
     """
-    parameters = None
-    dtype = None
+    dt_0: datetime.datetime
+    dt_t: Optional[datetime.datetime]
 
-    launch = None
-    iparams_arr = sparams_arr = None
+    iparams: dict
+    sparams: Union[int, Sequence[int]]
 
-    qs_sx = qs_xs = None
+    iparams_arr: np.ndarray
+    sparams_arr: np.ndarray
 
-    rng_states = None
+    # extra iparam arrays
+    iparams_kernel: np.ndarray
+    iparams_kernel_decomp: np.ndarray
+    iparams_meta: np.ndarray
+    iparams_weight: np.ndarray
 
-    g = f = h = p = None
+    ensemble_size: int
 
-    runs = 0
-    use_cuda = False
+    dtype: type
 
-    # internal
-    _tva = _tvb = None
-    _b, _sp = None, None
+    qs_sx: np.ndarray
+    qs_xs: np.ndarray
 
-    def __init__(self, launch, functions, parameters, sparams_count, runs, **kwargs):
-        """Initialize Base3DCOREModel.
+    def __init__(self, dt_0: Union[str, datetime.datetime], iparams: dict, sparams: Union[int, Sequence[int]], ensemble_size: int, dtype: type) -> None:
+        self.dt_0 = sanitize_dt(dt_0)
+        self.dt_t = self.dt_0
 
-        Initial parameters must be generated seperately (see generate_iparams).
+        self.iparams = iparams
+        self.sparams = sparams
+        self.ensemble_size = ensemble_size
+        self.dtype = dtype
 
-        Parameters
-        ----------
-        launch : datetime.datetime
-            Initial datetime.
-        functions : dict
-            Propagation, magnetic and transformation functions as dict.
-        parameters : py3dcore.model.Base3DCOREParameters
-            Model parameters instance.
-        sparams_count: int
-            Number of state parameters.
-        runs : int
-            Number of parallel model runs.
+        self.iparams_arr = np.empty((self.ensemble_size, len(self.iparams)), dtype=self.dtype)
+        self.iparams_kernel = None
+        self.iparams_weight = None
+        self.iparams_kernel_decomp = None
 
-        Other Parameters
-        ----------------
-        cuda_device: int
-            CUDA device, by default 0.
-        use_cuda : bool, optional
-            CUDA flag, by default False.
-
-        Raises
-        ------
-        ValueError
-            If the number of model runs is not divisible by 256 and CUDA flag is set.
-            If cuda is selected but not available.
-        """
-        self.launch = launch.timestamp()
-
-        self.g = functions["g"]
-        self.f = functions["f"]
-        self.h = functions["h"]
-        self.p = functions["p"]
-
-        self.parameters = parameters
-        self.dtype = parameters.dtype
-        self.runs = runs
-
-        self.use_cuda = kwargs.get("use_cuda", False)
-
-        if self.use_cuda and cuda.is_available():
-            raise NotImplementedError("CUDA functionality is not available yet")
-            # cuda.select_device(kwargs.get("cuda_device", 0))
-            # self.use_cuda = True
-        elif self.use_cuda:
-            raise ValueError("cuda is not available")
-
-        if self.use_cuda:
-            self.iparams_arr = cuda.device_array((self.runs, len(self.parameters)),
-                                                 dtype=self.dtype)
-            self.sparams_arr = cuda.device_array((self.runs, sparams_count),
-                                                 dtype=self.dtype)
-
-            self.qs_sx = cuda.device_array((self.runs, 4), dtype=self.dtype)
-            self.qs_xs = cuda.device_array((self.runs, 4), dtype=self.dtype)
-
-            self._tva = cuda.device_array((self.runs, 3), dtype=self.dtype)
-            self._tvb = cuda.device_array((self.runs, 3), dtype=self.dtype)
+        if isinstance(self.sparams, int):
+            self.sparams_arr = np.empty((self.ensemble_size, self.sparams), dtype=self.dtype)
+        elif isinstance(self.sparams, tuple):
+            self.sparams_arr = np.empty((self.ensemble_size, *self.sparams), dtype=self.dtype)
         else:
-            self.iparams_arr = np.empty(
-                (self.runs, len(self.parameters)), dtype=self.dtype)
-            self.sparams_arr = np.empty(
-                (self.runs, sparams_count), dtype=self.dtype)
+            raise TypeError("sparams must be of type int or tuple, not %s", type(self.sparams))
 
-            self.qs_sx = np.empty((self.runs, 4), dtype=self.dtype)
-            self.qs_xs = np.empty((self.runs, 4), dtype=self.dtype)
+        self.qs_sx = np.empty((self.ensemble_size, 4), dtype=self.dtype)
+        self.qs_xs = np.empty((self.ensemble_size, 4), dtype=self.dtype)
 
-            self._tva = np.empty((self.runs, 3), dtype=self.dtype)
-            self._tvb = np.empty((self.runs, 3), dtype=self.dtype)
+        self.iparams_meta = np.empty((len(self.iparams), 7), dtype=self.dtype)
+        self.update_iparams_meta()
+ 
+    def generator(self, random_seed: int = 42) -> None:
+        set_random_seed(random_seed)
 
-    def generate_iparams(self, seed):
-        """Generate initial parameters.
+        for k, iparam in self.iparams.items():
+            ii = iparam["index"]
+            dist = iparam["distribution"]
 
-        Parameters
-        ----------
-        seed : int
-            Random number seed.
-        """
-        if self.use_cuda:
-            self.rng_states = cxoro128p(self.runs, seed=seed)
-        else:
-            set_random_seed(seed)
+            def trunc_generator(func: Callable, max_v: float, min_v: float, size: int, **kwargs: Any) -> np.ndarray:
+                numbers = func(size=size, **kwargs)
+                for _ in range(100):
+                    flt = ((numbers > max_v) | (numbers < min_v))
+                    if np.sum(flt) == 0:
+                        return numbers
+                    numbers[flt] = func(size=len(flt), **kwargs)[flt]
+                raise RuntimeError("drawing numbers inefficiently (%i/%i after 100 iterations)", len(flt), size)                
 
-        self.parameters.generate(
-            self.iparams_arr, use_cuda=self.use_cuda, rng_states=self.rng_states)
-
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
-                             indices=self.parameters.qindices)
-
-    def perturb_iparams(self, particles, weights, kernels):
-        """Generate initial parameters by perturbing given particles.
-
-        Parameters
-        ----------
-        particles : np.ndarray
-            Particles.
-        weights : np.ndarray
-            Particle weights.
-        kernels : np.ndarray
-            Transition kernels.
-        """
-        self.parameters.perturb(self.iparams_arr, particles, weights, kernels,
-                                use_cuda=self.use_cuda, rng_states=self.rng_states)
-
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
-                             indices=self.parameters.qindices)
-
-    def update_iparams(self, iparams_arr, seed=None):
-        """Set initial parameters to given array. Array size must match the length of "self.runs".
-
-        Parameters
-        ----------
-        iparams : np.ndarray
-            Initial parameters array.
-        seed : int, optional
-            Random seed, by default None.
-        """
-        if seed:
-            if self.use_cuda:
-                self.rng_states = cxoro128p(self.runs, seed=seed)
+            # generate values according to given distribution
+            if dist in ["fixed", "fixed_value"]:
+                self.iparams_arr[:, ii] = iparam["default_value"]
+            elif dist in ["constant", "uniform"]:
+                self.iparams_arr[:, ii] = np.random.rand(self.ensemble_size) * (iparam["maximum"] - iparam["minimum"]) + iparam["minimum"]
+            elif dist in ["gaussian", "normal"]:
+                self.iparams_arr[:, ii] = trunc_generator(np.random.normal, iparam["maximum"], iparam["minimum"], self.ensemble_size, loc=iparam["mean"], scale=iparam["std"])
             else:
-                set_random_seed(seed)
+                raise NotImplementedError("parameter distribution \"%s\" is not implemented", dist)
 
-        self.iparams_arr = iparams_arr.astype(self.dtype)
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs, use_cuda=self.use_cuda,
-                             indices=self.parameters.qindices)
+        self.dt_t = self.dt_0
 
-    def propagate(self, t):
-        """Propagate all model runs to datetime t.
+    def propagator(self, dt_to: Union[str, datetime.datetime]) -> None:
+        raise NotImplementedError
 
-        Parameters
-        ----------
-        t : datetime.datetime
-            Datetime.
-        """
-        dt = self.dtype(t.timestamp() - self.launch)
+    def simulator(self, dt: Union[str, datetime.datetime, Sequence[str], Sequence[datetime.datetime]], pos: Union[np.ndarray, Sequence[np.ndarray]], sparams: Optional[Sequence[int]] = None) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        if isinstance(dt, datetime.datetime) or isinstance(dt, str):
+            dt = [dt]  # type: ignore
+            pos = [pos]
+        elif (len(dt) > 1 and len(pos) == 1) or np.array(pos).ndim == 1:
+            pos = [np.array(pos, dtype=self.dtype) for _ in range(len(dt))]
 
-        self.p(dt, self.iparams_arr, self.sparams_arr, use_cuda=self.use_cuda)
-
-    def get_field(self, s, b):
-        """Calculate magnetic field vectors at (s) coordinates.
-
-        Parameters
-        ----------
-        s : np.ndarray
-            Position vector array.
-        b : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-            Magnetic field output array.
-        """
-        self.transform_sq(s, q=self._tva)
-        self.h(self._tva, b, self.iparams_arr, self.sparams_arr, self.qs_xs,
-               use_cuda=self.use_cuda, rng_states=self.rng_states)
-
-    def get_sparams(self, sparams, sparams_out):
-        """Get selected sparams values.
-
-        Parameters
-        ----------
-        sparams : np.ndarray
-            Selected sparams indices.
-        sparams_out : np.ndarray
-            Output array.
-        """
-        if self.use_cuda:
-            raise NotImplementedError
-        else:
-            for i in range(len(sparams)):
-                sparam = sparams[i]
-                sparams_out[i] = self.sparams_arr[i, sparam]
-
-    def sim_fields(self, *args, **kwargs):
-        """Legacy dummy for simulate
-        """
-        if "b" in kwargs:
-            kwargs["b_out"] = kwargs.pop("b")
-
-        return self.simulate(*args, **kwargs)
-
-    def simulate(self, t, pos, sparams=None, b_out=None, sparams_out=None):
-        """Calculate magnetic field vectors at (s) coordinates and at times t (datetime timestamps).
-        Additionally returns any selected sparams.
-
-        Parameters
-        ----------
-        t : list[float]
-            Evaluation datetimes.
-        pos : np.ndarray
-            Position vector array at evaluation datetimes.
-        sparams : list[int]
-            List of state parameters to return.
-        b_out : Union[List[np.ndarray],
-                List[numba.cuda.cudadrv.devicearray.DeviceNDArray]], optional
-            Magnetic field temporary array, by default None.
-        sparams_out : Union[List[np.ndarray],
-                      List[numba.cuda.cudadrv.devicearray.DeviceNDArray]], optional
-            State parameters temporary array, by default None.
-
-        Returns
-        -------
-        Union[list[np.ndarray], list[numba.cuda.cudadrv.devicearray.DeviceNDArray]],
-        Union[list[np.ndarray], list[numba.cuda.cudadrv.devicearray.DeviceNDArray]]
-            List of magnetic field output and state parameters at evaluation datetimes.
-
-        Raises
-        ------
-        ValueError
-            If pos array has invalid dimension (must be 1 or 2).
-        """
-        logger = logging.getLogger(__name__)
-
-        if np.array(pos).ndim == 1:
-            pos = [np.array(pos, dtype=self.dtype) for _ in range(0, len(t))]
-        elif np.array(pos).ndim == 2:
-            pos = [np.array(p, dtype=self.dtype) for p in pos]
-        else:
-            logger.exception("position array has invalid dimension")
-            raise ValueError("position array has invalid dimension")
-
-        if self.use_cuda:
-            pos = [cuda.to_device(p) for p in pos]
-
-        if b_out is None:
-            if self.use_cuda:
-                if self._b is None or len(self._b[0]) != len(t) \
-                        or self._b[0][0].shape != (self.runs, 3):
-                    self._b = [cuda.device_array((self.runs, 3), dtype=self.dtype)
-                               for _ in range(0, len(t))]
-            else:
-                if self._b is None or len(self._b) != len(t) or self._b[0].shape != (self.runs, 3):
-                    self._b = [np.empty((self.runs, 3), dtype=self.dtype)
-                               for _ in range(0, len(t))]
-
-            b_out = self._b
-
-        if sparams and len(sparams) > 0 and sparams_out is None:
-            if self.use_cuda:
-                if self._sp is None or len(self._sp[0]) != len(t) \
-                        or self._sp[0][0].shape != (self.runs, len(sparams)):
-                    self._sp = [cuda.device_array((self.runs, len(sparams)), dtype=self.dtype)
-                                for _ in range(0, len(t))]
-            else:
-                if self._sp is None or len(self._sp) != len(t) or \
-                        self._sp[0].shape != (self.runs, len(sparams)):
-                    self._sp = [np.empty((self.runs, len(sparams)), dtype=self.dtype)
-                                for _ in range(0, len(t))]
-
-            sparams_out = self._sp
-
-        for i in range(0, len(t)):
-            self.propagate(t[i])
-            self.get_field(pos[i], b_out[i])
-
-            if sparams and len(sparams) > 0:
-                self.get_sparams(sparams, sparams_out[i])
+        b_out = [np.empty((self.ensemble_size, 3), dtype=self.dtype) for _ in range(len(dt))]  # type: ignore
 
         if sparams and len(sparams) > 0:
-            return b_out, sparams_out
+            s_out = [np.empty((self.ensemble_size, len(sparams)), dtype=self.dtype) for _ in range(len(dt))]  # type: ignore
+
+        for i in range(len(dt)):  # type: ignore
+            self.propagator(dt[i])  # type: ignore
+            self.simulator_mag(pos[i], b_out[i])
+
+            if sparams and len(sparams) > 0:
+                s_out[i][:] = self.sparams_arr[i, sparams]
+        if sparams and len(sparams) > 0:
+            return b_out, s_out
         else:
-            return b_out
+            return b_out, None
 
-    def transform_sq(self, s, q):
-        """Transform (s) coordinates to (q) coordinates.
+    def simulator_mag(self, pos: np.ndarray, out: np.ndarray) -> None:
+        raise NotImplementedError
 
-        Parameters
-        ----------
-        s : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-            The (s) coordinate array.
-        q : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-            The (q) coordinate array.
-        """
-        self.f(s, q, self.iparams_arr, self.sparams_arr, self.qs_sx,
-               use_cuda=self.use_cuda)
+    def update_iparams(self, iparams_arr: np.ndarray, update_weights_kernels: bool = False, kernel_mode: str = "cm") -> None:
+        if update_weights_kernels:
+            old_iparams = np.array(self.iparams_arr, dtype=self.dtype)
+            old_weights = np.array(self.iparams_weight, dtype=self.dtype)
 
-    def transform_qs(self, s, q):
-        """Transform (q) coordinates to (s) coordinates.
+            self.iparams_arr = iparams_arr.astype(self.dtype)
 
-        Parameters
-        ----------
-        q : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-            The (q) coordinate array.
-        s : Union[np.ndarray, numba.cuda.cudadrv.devicearray.DeviceNDArray]
-            The (s) coordinate array.
-        """
-        self.g(q, s, self.iparams_arr, self.sparams_arr, self.qs_xs,
-               use_cuda=self.use_cuda)
+            self.update_weights(old_iparams, old_weights, kernel_mode=kernel_mode)
 
-
-class Toroidal3DCOREModel(Base3DCOREModel):
-    def plot_fieldline(self, ax, fl, arrows=None, **kwargs):
-        """Plot magnetic field line.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes
-            Matplotlib axes.
-        fl : np.ndarray
-            Field line in (s) coordinates.
-        """
-        if arrows:
-            handles = []
-
-            for index in list(range(len(fl)))[::arrows][:-1]:
-                x, y, z = fl[index]
-                xv, yv, zv = fl[index + arrows // 2] - fl[index]
-
-                handles.append(ax.quiver(
-                    x, y, z, xv, yv, zv, **kwargs
-                ))
-
-            return handles
+            self.update_kernels(kernel_mode=kernel_mode)
         else:
-            return ax.plot(*fl.T, **kwargs)
+            self.iparams_arr = iparams_arr.astype(self.dtype)
 
-    def visualize_fieldline(self, q0, index=0, sign=1, steps=1000, step_size=0.005):
-        """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
-        returns the field lines in (s) coordinates.
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
 
-        Parameters
-        ----------
-        q0 : np.ndarray
-            Starting point in (q) coordinates.
-        index : int, optional
-            Model run index, by default 0.
-        sign : int, optional
-            Integration direction, by default 1.
-        steps : int, optional
-            Number of integration steps, by default 1000.
-        step_size : float, optional
-            Integration step size, by default 0.01.
+        self.dt_t = self.dt_0
 
-        Returns
-        -------
-        np.ndarray
-            Integrated magnetic field lines in (s) coordinates.
-        """
-        # only implemented in cpu mode
-        if self.use_cuda:
-            raise NotImplementedError("visualize_fieldline not supported in cuda mode")
+    def update_kernels(self, kernel_mode: str = "cm") -> None:
+        if kernel_mode == "cm":
+            self.iparams_kernel = 2 * np.cov(self.iparams_arr, rowvar=False)
 
-        if self.iparams_arr[index, -1] > 0 or self.iparams_arr[index, -1] < 0:
-            raise Warning("cannot generate field lines with non-zero noise level")
+            # due to aweights sometimes very small numbers are generated
+            #self.iparams_kernel[np.where(self.iparams_kernel < 1e-12)] = 0
+        elif kernel_mode == "lcm":
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
 
-        _tva = np.empty((3,), dtype=self.dtype)
-        _tvb = np.empty((3,), dtype=self.dtype)
+        # compute lower triangular matrices
+        self.iparams_kernel_decomp = cholesky(self.iparams_kernel)
 
-        sign = sign / np.abs(sign)
+    def update_weights(self, old_iparams: np.ndarray, old_weights: np.ndarray, kernel_mode: str = "cm") -> None:
+        if kernel_mode == "cm":
+            # update weights
+            _numba_weight_kernel_cm(self.iparams_arr, old_iparams, self.iparams_weight, old_weights, self.iparams_kernel)
+        elif kernel_mode == "lcm":
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
 
-        self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-               use_cuda=False)
+        self.iparams_weight /= np.sum(self.iparams_weight)
 
-        fl = [np.array(_tva, dtype=self.dtype)]
+    def perturb_iparams(self, old_iparams: np.ndarray, old_weights: np.ndarray, old_kernels: np.ndarray, kernel_mode: str = "cm") -> None:
+        if kernel_mode == "cm":
+            # perturb particles
+            _numba_perturb_kernel_cm(self.iparams_arr, old_iparams, old_weights, old_kernels, self.iparams_meta)
+        elif kernel_mode == "lcm":
+            raise NotImplementedError
+        else:
+            raise ValueError("iparams kernel(s) must be 2 or 3 dimensional")
 
-        def iterate(s):
-            self.f(s, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
-                   use_cuda=False)
-            self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-                   use_cuda=False, bounded=False)
-            return sign * _tvb / np.linalg.norm(_tvb)
+        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
 
-        while len(fl) < steps:
-            # use implicit method and least squares for calculating the next step
-            sol = getattr(least_squares(
-                lambda x: x - fl[-1] - step_size *
-                iterate((x.astype(self.dtype) + fl[-1]) / 2),
-                fl[-1]), "x")
+        self.dt_t = self.dt_0
 
-            fl.append(np.array(sol.astype(self.dtype)))
+    def update_iparams_meta(self) -> None:
+        for k, iparam in self.iparams.items():
+            ii = iparam["index"]
+            dist = iparam["distribution"]
+            bound = iparam["boundary"]
 
-        fl = np.array(fl, dtype=self.dtype)
+            self.iparams_meta[ii, 0] = iparam.get("active", 1)
 
-        return fl
+            if iparam["maximum"] <= iparam["minimum"]:
+                raise ValueError("invalid parameter range selected")
 
-    def visualize_fieldline_dpsi(self, q0, dpsi=np.pi, index=0, sign=1, step_size=0.005):
-        """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
-        returns the field lines in (s) coordinates.
+            if dist in ["fixed", "fixed_value"]:
+                self.iparams_meta[ii, 1] = 0
+                self.iparams_meta[ii, 3] = iparam["maximum"]
+                self.iparams_meta[ii, 4] = iparam["minimum"]
+            elif dist in ["constant", "uniform"]:
+                self.iparams_meta[ii, 1] = 1
+                self.iparams_meta[ii, 3] = iparam["maximum"]
+                self.iparams_meta[ii, 4] = iparam["minimum"]
+            elif dist in ["gaussian", "normal"]:
+                self.iparams_meta[ii, 1] = 2
+                self.iparams_meta[ii, 3] = iparam["maximum"]
+                self.iparams_meta[ii, 4] = iparam["minimum"]
+                self.iparams_meta[ii, 5] = iparam["mean"]
+                self.iparams_meta[ii, 6] = iparam["std"]
+            else:
+                raise NotImplementedError("parameter distribution \"%s\" is not implemented", dist)
 
-        Parameters
-        ----------
-        q0 : np.ndarray
-            Starting point in (q) coordinates.
-        dpsi: float
-            Delta psi to integrate by, default np.pi
-        index : int, optional
-            Model run index, by default 0.
-        sign : int, optional
-            Integration direction, by default 1.
-        step_size : float, optional
-            Integration step size, by default 0.01.
+            if bound == "continuous":
+                self.iparams_meta[ii, 2] = 0
+            elif bound == "periodic":
+                self.iparams_meta[ii, 2] = 1
 
-        Returns
-        -------
-        np.ndarray
-            Integrated magnetic field lines in (s) coordinates.
-        """
-        # only implemented in cpu mode
-        if self.use_cuda:
-            raise NotImplementedError("visualize_fieldline not supported in cuda mode")
+    def visualize_shape(self, *args: Any, **kwargs: Any) -> np.ndarray:
+        raise NotImplementedError
 
-        if self.iparams_arr[index, -1] > 0 or self.iparams_arr[index, -1] < 0:
-            raise Warning("cannot generate field lines with non-zero noise level")
 
-        _tva = np.empty((3,), dtype=self.dtype)
-        _tvb = np.empty((3,), dtype=self.dtype)
+@numba.njit
+def _numba_perturb_select_weights(size: np.ndarray, weights_old: np.ndarray) -> np.ndarray:
+    r = np.random.rand(size)
+    si = -np.ones((size,), dtype=np.int64)
 
-        sign = sign / np.abs(sign)
+    for wi in range(len(weights_old)):
+        r -= weights_old[wi]
 
-        self.g(q0, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-               use_cuda=False)
+        uflt = si == -1
+        nflt = r < 0
 
-        fl = [np.array(_tva, dtype=self.dtype)]
+        si[uflt & nflt] = wi
 
-        def iterate(s):
-            self.f(s, _tva, self.iparams_arr[index], self.sparams_arr[index], self.qs_sx[index],
-                   use_cuda=False)
-            self.h(_tva, _tvb, self.iparams_arr[index], self.sparams_arr[index], self.qs_xs[index],
-                   use_cuda=False, bounded=False)
-            return sign * _tvb / np.linalg.norm(_tvb)
+    # for badly normalized weights
+    si[si < 0] = 0
 
-        psi_pos = q0[1]
-        dpsi_count = 0
+    return si
 
-        while dpsi_count < dpsi:
-            # use implicit method and least squares for calculating the next step
-            sol = getattr(least_squares(
-                lambda x: x - fl[-1] - step_size *
-                iterate((x.astype(self.dtype) + fl[-1]) / 2),
-                fl[-1]), "x")
 
-            fl.append(np.array(sol.astype(self.dtype)))
+@numba.njit(parallel=True)
+def _numba_perturb_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, weights_old: np.ndarray, kernel_lower: np.ndarray, meta: np.ndarray) -> None:
+    isel = _numba_perturb_select_weights(len(iparams_new), weights_old)
 
-            self.f(fl[-1], _tva, self.iparams_arr[index], self.sparams_arr[index],
-                   self.qs_sx[index], use_cuda=False)
+    for i in numba.prange(len(iparams_new)):
+        si = isel[i]
 
-            dpsi_count += np.abs(psi_pos - _tva[1])
-            psi_pos = _tva[1]
+        c = 0
+        ct = 0
+        Nc = 20
 
-        fl = np.array(fl, dtype=self.dtype)
+        offset = np.dot(kernel_lower, np.random.randn(len(meta), Nc))
 
-        return fl
+        while True:
+            acc = True
+            candidate = iparams_old[si] + offset[:, c]
 
-    def visualize_wireframe(self, index=0, r=1.0, d=10):
-        """Generate model wireframe.
+            for pi in range(len(meta)):
+                is_oob = ((candidate[pi] > meta[pi, 3]) | (candidate[pi] < meta[pi, 4]))
 
-        Parameters
-        ----------
-        index : int, optional
-            Model run index, by default 0.
-        r : float, optional
-            Surface radius (r=1 equals the boundary of the flux rope), by default 1.0.
+                if is_oob:
+                    # shift for continous variables
+                    if meta[pi, 2] == 1:
+                        while candidate[pi] > meta[pi, 3]:
+                            candidate[pi] += meta[pi, 4] - meta[pi, 3]
 
-        Returns
-        -------
-        np.ndarray
-            Wireframe array (to be used with plot_wireframe).
-        """
-        r = np.array([np.abs(r)], dtype=self.dtype)
+                        while candidate[pi] < meta[pi, 4]:
+                            candidate[pi] += meta[pi, 3] - meta[pi, 4]
+                    else:
+                        acc = False
+                        break
+            
+            if acc:
+                break
 
-        c = 360 // d + 1
-        u = np.radians(np.r_[0:360. + d:d])
-        v = np.radians(np.r_[0:360. + d:d])
+            c += 1
 
-        # combination of wireframe points in (q)
-        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c ** 2, 3)
+            if c >= Nc - 1:
+                c = 0
+                ct += 1
+                offset = np.dot(kernel_lower, np.random.randn(len(meta), Nc))
+        
+        iparams_new[i] = candidate
 
-        # only implemented in cpu mode
-        if self.use_cuda:
-            raise NotImplementedError("visualize_wireframe not supported in cuda mode")
 
-        for i in range(0, len(arr)):
-            self.g(arr[i], arr[i], self.iparams_arr[index], self.sparams_arr[index],
-                   self.qs_xs[index], use_cuda=False)
+@numba.njit(parallel=True)
+def _numba_weight_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, weights_new: np.ndarray, weights_old: np.ndarray, kernel: np.ndarray) -> None:
+    inv_kernel = np.linalg.pinv(kernel).astype(iparams_old.dtype) / 2
 
-        return arr.reshape((c, c, 3))
+    for i in numba.prange(len(iparams_new)):
+        nw = 0
 
-    def visualize_wireframe_dpsi(self, psi0, dpsi, index=0, r=1.0, d=10):
-        """Generate model wireframe.
+        for j in range(len(iparams_old)):
+            v = _numba_cov_dist(iparams_new[i], iparams_old[j], inv_kernel)
 
-        Parameters
-        ----------
-        index : int, optional
-            Model run index, by default 0.
-        r : float, optional
-            Surface radius (r=1 equals the boundary of the flux rope), by default 1.0.
+            nw += np.exp(np.log(weights_old[j]) - v)
+        
+        weights_new[i] = 1 / nw
 
-        Returns
-        -------
-        np.ndarray
-            Wireframe array (to be used with plot_wireframe).
-        """
-        r = np.array([np.abs(r)], dtype=self.dtype)
 
-        deg_min = 180 * psi0 / np.pi
-        deg_max = 180 * (psi0 + dpsi) / np.pi
-
-        u = np.radians(np.r_[deg_min:deg_max + d:d])
-        v = np.radians(np.r_[0:360. + d:d])
-
-        c1 = len(u)
-        c2 = len(v)
-
-        # combination of wireframe points in (q)
-        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c1 * c2, 3)
-
-        for i in range(0, len(arr)):
-            self.g(arr[i], arr[i], self.iparams_arr[index], self.sparams_arr[index],
-                   self.qs_xs[index], use_cuda=False)
-
-        return arr.reshape((c1, c2, 3))
+@numba.njit(inline="always")
+def _numba_cov_dist(x1: np.ndarray, x2: np.ndarray, cov: np.ndarray) -> np.ndarray:
+    dx = (x1 - x2).astype(cov.dtype)
+    return np.dot(dx, np.dot(cov, dx))

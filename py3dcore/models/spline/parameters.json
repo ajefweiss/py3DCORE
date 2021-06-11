@@ -3,7 +3,7 @@
         "index": 0,
         "name": "launch time",
         "distribution": "fixed",
-        "fixed_value": 0,
+        "default_value": 0,
         "maximum": 3600,
         "minimum": -3600,
         "boundary": "continuous",
@@ -22,8 +22,8 @@
         "index": 2,
         "name": "latitude",
         "distribution": "uniform",
-        "maximum": 90,
-        "minimum": -90,
+        "maximum": 45,
+        "minimum": -45,
         "boundary": "periodic",
         "label": "L_2"
     },
@@ -36,6 +36,7 @@
         "boundary": "periodic",
         "label": "O"
     },
+
     "cme_diameter_1au": {
         "index": 4,
         "name": "diameter",
@@ -49,8 +50,8 @@
         "index": 5,
         "name": "aspect ratio",
         "distribution": "uniform",
-        "maximum": 12,
-        "minimum": 0.5,
+        "maximum": 5,
+        "minimum": 1,
         "boundary": "continuous",
         "label": "\\delta"
     },
@@ -58,9 +59,9 @@
         "index": 6,
         "name": "initial radius",
         "distribution": "fixed",
-        "fixed_value": 20,
-        "maximum": 25,
-        "minimum": 15,
+        "default_value": 20,
+        "maximum": 50,
+        "minimum": 10,
         "boundary": "continuous",
         "label": "R_0"
     },
@@ -73,27 +74,38 @@
         "boundary": "continuous",
         "label": "V_0"
     },
-    "magnetic_field_twist": {
+    "t_factor": {
         "index": 8,
-        "name": "magnetic twist",
+        "name": "t factor",
         "distribution": "uniform",
-        "maximum": 25,
-        "minimum": -25,
+        "maximum": 250,
+        "minimum": -250,
         "boundary": "continuous",
-        "label": "\\tau"
+        "label": "T"
     },
-    "magnetic_field_radius": {
+    "cme_expansion_rate": {
         "index": 9,
-        "name": "magnetic coeff",
+        "name": "cme expansion rate",
         "distribution": "fixed",
-        "fixed_value": 1,
+        "default_value": 1.14,
         "maximum": 2,
-        "minimum": 0.1,
+        "minimum": 0.3,
         "boundary": "continuous",
-        "label": "B_S"
+        "label": "n_a"
     },
-    "magnetic_field_strength_1au": {
+    "magnetic_decay_rate": {
         "index": 10,
+        "name": "magnetic field decay",
+        "distribution": "fixed",
+        "default_value": 1.64,
+        "maximum": 2,
+        "minimum": 1,
+        "boundary": "continuous",
+        "label": "n_b"
+    },
+
+    "magnetic_field_strength_1au": {
+        "index": 11,
         "name": "axial strength",
         "distribution": "uniform",
         "maximum": 50,
@@ -102,30 +114,12 @@
         "label": "B_{1AU}"
     },
     "background_drag": {
-        "index": 11,
+        "index": 12,
         "name": "background drag",
         "distribution": "uniform",
         "maximum": 2,
         "minimum": 0.2,
         "boundary": "continuous",
         "label": "\\gamma"
-    },
-    "background_velocity": {
-        "index": 12,
-        "name": "background velocity",
-        "distribution": "uniform",
-        "maximum": 450,
-        "minimum": 250,
-        "boundary": "continuous",
-        "label": "V_{SW}"
-    },
-    "noise": {
-        "index": 13,
-        "name": "gaussian noise",
-        "distribution": "uniform",
-        "maximum": 5,
-        "minimum": 0,
-        "boundary": "continuous",
-        "label": "\\sigma"
     }
 }

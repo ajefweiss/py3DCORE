@@ -5,67 +5,72 @@
 3DCORE utility functions.
 """
 
-import logging
+import datetime
+import numba
+import numpy as np
 import py3dcore
 import sys
 
-
-def configure_logging(debug=False, logfile=None, verbose=False):
-    """Configures built in python logger.
-
-    Parameters
-    ----------
-    debug : bool, optional
-        Enable debug logging.
-    logfile : None, optional
-        Logfile path.
-    verbose : bool, optional
-        Enable verbose logging.
-    """
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-
-    stream = logging.StreamHandler(sys.stdout)
-    if debug and verbose:
-        stream.setLevel(logging.DEBUG)
-    elif verbose:
-        stream.setLevel(logging.INFO)
-    else:
-        stream.setLevel(logging.WARNING)
-
-    stream.setFormatter(logging.Formatter(
-        "%(asctime)s - %(name)s - %(message)s"))
-    root.addHandler(stream)
-
-    if logfile:
-        file = logging.FileHandler(logfile, "a")
-        if debug:
-            file.setLevel(logging.DEBUG)
-        else:
-            file.setLevel(logging.INFO)
-
-        file.setFormatter(
-            logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        root.addHandler(file)
-
-    # disable annoying loggers
-    logging.getLogger("numba.byteflow").setLevel("WARNING")
-    logging.getLogger("numba.cuda.cudadrv.driver").setLevel("WARNING")
-    logging.getLogger("numba.interpreter").setLevel("WARNING")
+from numba import guvectorize
+from scipy.signal import detrend, welch
+from typing import Sequence, Tuple
 
 
-def select_model(model):
-    if model.upper() == "TTGHV1" or model.upper() == "THIN_TORUS_GH" or model.upper() == "THINTORUSGH3DCOREMODEL":
-        return py3dcore.models.TTGHv1
-    elif model.upper() == "TTGHV2":
-        return py3dcore.models.TTGHv2
-    elif model.upper() == "TTGHV2T":
-        return py3dcore.models.TTGHv2T
-    elif model.upper() == "TTGHV3":
-        return py3dcore.models.TTGHv3
-    elif model.upper() == "TTNCV2":
-        return py3dcore.models.TTNCv2
-    else:
-        raise NotImplementedError("unkown model \"%s\"", model.upper())
+@guvectorize([
+    "void(float32[:, :], float32[:, :])",
+    "void(float64[:, :], float64[:, :])"],
+    '(n, n) -> (n, n)')
+def cholesky(mat: np.ndarray, res: np.ndarray) -> None:
+    # this is actually the A = LDL.T decomposition
+    
+    n = mat.shape[0]
+
+    _lmat = np.identity(n)
+    _dmat = np.zeros((n, n))
+
+    for i in range(n):
+        _dmat[i, i] = mat[i, i] - np.sum(_lmat[i, :i]**2 * np.diag(_dmat)[:i])
+
+        for j in range(i + 1, n):
+            if _dmat[i, i] == 0:
+                _lmat[i, i] = 0
+            else:
+                _lmat[j, i] = mat[j, i] - np.sum(_lmat[j, :i] * _lmat[i, :i] * np.diag(_dmat)[:i])
+                _lmat[j, i] /= _dmat[i, i]
+
+    res[:] = np.dot(_lmat, np.sqrt(_dmat))[:]
+
+
+def mag_fft(dt: Sequence[datetime.datetime], bdt: np.ndarray, sampling_freq: int) -> Tuple[np.ndarray, np.ndarray]:
+    n_s = int(((dt[-1] - dt[0]).total_seconds() / 3600) - 1)
+    n_perseg = np.min([len(bdt), 256])
+
+    p_bX = detrend(bdt[:, 0], type="linear", bp=n_s)
+    p_bY = detrend(bdt[:, 1], type="linear", bp=n_s)
+    p_bZ = detrend(bdt[:, 2], type="linear", bp=n_s)
+
+    _,  wX = welch(p_bX, fs=1 / sampling_freq, nperseg=n_perseg)
+    _,  wY = welch(p_bY, fs=1 / sampling_freq, nperseg=n_perseg)
+    wF, wZ = welch(p_bZ, fs=1 / sampling_freq, nperseg=n_perseg)
+
+    wS = (wX + wY + wZ) / 3
+
+    # convert P(k) into suitable form for fft
+    fF = np.fft.fftfreq(len(p_bX), d=sampling_freq)
+    fS = np.zeros((len(fF)))
+
+    for i in range(len(fF)):
+        k = np.abs(fF[i])
+        fS[i] = np.sqrt(wS[np.argmin(np.abs(k - wF))])
+
+    return fF, fS
+
+
+def set_random_seed(seed: int) -> None:
+    np.random.seed(seed)
+    _numba_set_random_seed(seed)
+
+
+@numba.njit
+def _numba_set_random_seed(seed: int) -> None:
+    np.random.seed(seed)
