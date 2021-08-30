@@ -15,21 +15,23 @@ from heliosat.transform import transform_reference_frame
 from typing import Any, List, Optional, Sequence, Type, Union
 
 
-def generate_ensemble(path: str, dt: Sequence[datetime.datetime], reference_frame: str = "HCI", perc: float = 0.95) -> np.ndarray:
+def generate_ensemble(path: str, dt: Sequence[datetime.datetime], reference_frame: str = "HCI", perc: float = 0.95, max_index=None) -> np.ndarray:
     observers = BaseFitter(path).observers
     ensemble_data = []
+    
 
     for (observer, _, _, _) in observers:
         ftobj = BaseFitter(path)
         observer_obj = getattr(heliosat, observer)()
         ensemble = np.squeeze(np.array(ftobj.model_obj.simulator(dt, observer_obj.trajectory(dt, reference_frame="HCI"))[0]))
 
-        ensemble = ensemble[:, :256, :]
+        if max_index is None:
+            max_index =  ensemble.shape[1]
+
+        ensemble = ensemble[:, :max_index, :]
 
         if reference_frame != "HCI":
-            for j in range(0, 256):
-                if j % 100 == 0 and j > 0:
-                    print(j)
+            for j in range(0, max_index):
                 ensemble[:, j] = transform_reference_frame(dt, ensemble[:, j], "HCI", reference_frame)
 
         ensemble[np.where(ensemble == 0)] = np.nan

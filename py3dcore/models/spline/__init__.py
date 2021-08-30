@@ -194,7 +194,6 @@ class SplineModel(SimulationBlackBox):
                 csplines_sq(fll[-1], self.iparams_arr[iparam_index], self.sparams_arr[iparam_index],
                             self.cscoeff[iparam_index], self.cscoeff_v[iparam_index], _q)
             except Exception as err:
-                print(err)
                 return np.array(fll[:-1]).astype(self.dtype)
 
             if _q[1] > 1 - h:
@@ -337,7 +336,7 @@ def _numba_propagator(t_offset: float, iparams_arr: np.ndarray, sparams_arr: np.
             else:
                 dv = p_v_abs - v_sw_eff
                 a = -gamma * dv * np.abs(dv) * t_offset
-                print(a)
+                #print(a)
                 #print(p_v_abs)
                 a_fac[k] = (p_v_abs + a) / p_v_abs
 

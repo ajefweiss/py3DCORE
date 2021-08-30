@@ -95,7 +95,7 @@ def _numba_get_sw_vr(dt_offset: float, pos: np.ndarray, sw_data: np.ndarray, rma
         if rx >= sw_data.shape[0]:
             rx = sw_data.shape[0] - 1
 
-    lx = int((lon - rota) / 2)
+    lx = int((lon + rota) / 2)
 
     if sw_data.ndim == 2:
         return sw_data[rx, lx]

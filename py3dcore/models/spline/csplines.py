@@ -278,4 +278,3 @@ def csplines_gh_ub(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, csco
         b[0] = 0
         b[1] = 0
         b[2] = 0
-
