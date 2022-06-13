@@ -15,24 +15,25 @@ from heliosat.transform import transform_reference_frame
 from typing import Any, List, Optional, Sequence, Type, Union
 
 
-def generate_ensemble(path: str, dt: Sequence[datetime.datetime], reference_frame: str = "HCI", perc: float = 0.95, max_index=None) -> np.ndarray:
+def generate_ensemble(path: str, dt: Sequence[datetime.datetime], reference_frame: str = "HCI", reference_frame_to: str = "HCI", perc: float = 0.95, max_index=None) -> np.ndarray:
     observers = BaseFitter(path).observers
     ensemble_data = []
     
 
-    for (observer, _, _, _) in observers:
+    for (observer, _, _, _, _) in observers:
         ftobj = BaseFitter(path)
         observer_obj = getattr(heliosat, observer)()
-        ensemble = np.squeeze(np.array(ftobj.model_obj.simulator(dt, observer_obj.trajectory(dt, reference_frame="HCI"))[0]))
+        ensemble = np.squeeze(np.array(ftobj.model_obj.simulator(dt, observer_obj.trajectory(dt, reference_frame=reference_frame))[0]))
 
         if max_index is None:
             max_index =  ensemble.shape[1]
 
         ensemble = ensemble[:, :max_index, :]
 
-        if reference_frame != "HCI":
-            for j in range(0, max_index):
-                ensemble[:, j] = transform_reference_frame(dt, ensemble[:, j], "HCI", reference_frame)
+        # transform frame
+        if reference_frame != reference_frame_to:
+            for k in range(0, ensemble.shape[1]):
+                ensemble[:, k, :] = transform_reference_frame(dt, ensemble[:, k, :], reference_frame, reference_frame_to)
 
         ensemble[np.where(ensemble == 0)] = np.nan
 
@@ -68,8 +69,8 @@ class BaseFitter(object):
         else:
             self.locked = False
 
-    def add_observer(self, observer: str, dt: Union[str, datetime.datetime, Sequence[str], Sequence[datetime.datetime]], dt_s: Union[str, datetime.datetime], dt_e: Union[str, datetime.datetime]) -> None:        
-        self.observers.append([observer, sanitize_dt(dt), sanitize_dt(dt_s), sanitize_dt(dt_e)])
+    def add_observer(self, observer: str, dt: Union[str, datetime.datetime, Sequence[str], Sequence[datetime.datetime]], dt_s: Union[str, datetime.datetime], dt_e: Union[str, datetime.datetime], dt_shift: datetime.timedelta = None) -> None:        
+        self.observers.append([observer, sanitize_dt(dt), sanitize_dt(dt_s), sanitize_dt(dt_e), dt_shift])
 
     def initialize(self, dt_0: Union[str, datetime.datetime], model: Type[SimulationBlackBox], model_kwargs: dict = {}) -> None:
         if self.locked:
@@ -158,7 +159,7 @@ class FittingData(object):
 
         if noise_model == "psd":
             for o in range(self.length):
-                observer, dt, dt_s, dt_e = self.observers[o]
+                observer, dt, dt_s, dt_e, _ = self.observers[o]
 
                 observer_obj = getattr(heliosat, observer)()
 
@@ -184,7 +185,7 @@ class FittingData(object):
         self.data_l = []
 
         for o in range(self.length):
-            observer, dt, dt_s, dt_e = self.observers[o]
+            observer, dt, dt_s, dt_e, dt_shift = self.observers[o]
 
             if hasattr(time_offset, "__len__"):
                 dt_s -= datetime.timedelta(hours=time_offset[o])  # type: ignore
@@ -205,7 +206,10 @@ class FittingData(object):
             mask[0] = 0
             mask[-1] = 0
 
-            self.data_dt.extend(dt_all)
+            if dt_shift:
+                self.data_dt.extend([_ + dt_shift for _ in dt_all])
+            else:
+                self.data_dt.extend(dt_all)
             self.data_b.extend(b_all)
             self.data_o.extend(trajectory)
             self.data_m.extend(mask)

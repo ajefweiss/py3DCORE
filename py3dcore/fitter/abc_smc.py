@@ -97,7 +97,8 @@ class ABC_SMC(BaseFitter):
                 worker_args = (iter_i, self.dt_0, self.model, self.model_kwargs, model_obj.iparams_arr, model_obj.iparams_weight, model_obj.iparams_kernel_decomp,
                             data_obj, summary_type, self.hist_eps[-1], kernel_mode)
 
-                _results = starmap(abc_smc_worker, [(*worker_args, _random_seed + i) for i in range(jobs)])
+                logger.info("starting simulations")
+                _results = mpool.starmap(abc_smc_worker, [(*worker_args, _random_seed + i) for i in range(jobs)])
                 total_runs = jobs * int(self.model_kwargs["ensemble_size"])  # type: ignore
 
                 # repeat until enough samples are collected
@@ -181,8 +182,9 @@ class ABC_SMC(BaseFitter):
 
                     self.save(output_file, **extra_args)
         finally:
-            mpool.close()
-            mpool.join()
+            pass
+            #mpool.close()
+            #mpool.join()
 
 
 def abc_smc_worker(*args: Any) -> Tuple[np.ndarray, np.ndarray]:

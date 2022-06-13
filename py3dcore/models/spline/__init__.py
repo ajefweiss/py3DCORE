@@ -10,7 +10,7 @@ import py3dcore
 from ...model import SimulationBlackBox
 from ...rotqs import _numba_quaternion_rotate
 from ...swbg import SolarWindBG, _numba_get_sw_vr
-from ...util import cholesky
+from ...util import ldl_decomp
 from heliosat.util import sanitize_dt
 from itertools import product
 from numba import guvectorize
@@ -68,7 +68,7 @@ class SplineModel(SimulationBlackBox):
             if k in iparams_dict:
                 iparams_dict[k].update(v)
             else:
-                raise KeyError("key \"%s\" not defined in parameters.json", k)
+                raise KeyError("key \"{0!s}\" not defined in parameters.json".format(k))
 
         super(SplineModel, self).__init__(dt_0, iparams=iparams_dict, sparams=(particles, 6), ensemble_size=ensemble_size, dtype=dtype)
 
@@ -242,7 +242,7 @@ def init_particles(pfunc: Callable, iparams_arr: np.ndarray, sparams_arr: np.nda
         sparams_arr[i, :, 3:] = dxs
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=False)
 def _numba_generate_csplines(sparams_arr: np.ndarray, Lmat: np.ndarray, pn: int, cscoeff_x: np.ndarray, cscoeff_v: np.ndarray) -> None:
     h = 1 / (pn - 1)
 
@@ -307,7 +307,7 @@ def _numba_generate_csplines_lmatrix(pn: int) -> np.ndarray:
     A[0, 1] = .5
     A[k-1, k-2] = .5
 
-    return cholesky(A)
+    return ldl_decomp(A)
 
 
 #@numba.njit

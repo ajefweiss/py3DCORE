@@ -20,9 +20,9 @@ from typing import Sequence, Tuple
     "void(float32[:, :], float32[:, :])",
     "void(float64[:, :], float64[:, :])"],
     '(n, n) -> (n, n)')
-def cholesky(mat: np.ndarray, res: np.ndarray) -> None:
-    # this is actually the A = LDL.T decomposition
-    
+def ldl_decomp(mat: np.ndarray, res: np.ndarray) -> None:
+    """Computes the LDL decomposition, returns L.sqrt(D).
+    """
     n = mat.shape[0]
 
     _lmat = np.identity(n)
@@ -42,6 +42,10 @@ def cholesky(mat: np.ndarray, res: np.ndarray) -> None:
 
 
 def mag_fft(dt: Sequence[datetime.datetime], bdt: np.ndarray, sampling_freq: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Computes the mean power spectrum distribution from a magnetic field measurements over all three vector components.
+
+    Note: Assumes that P(k) is the same for all three vector components.
+    """
     n_s = int(((dt[-1] - dt[0]).total_seconds() / 3600) - 1)
     n_perseg = np.min([len(bdt), 256])
 

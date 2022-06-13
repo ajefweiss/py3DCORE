@@ -4,13 +4,13 @@
 """
 
 import datetime
-import logging
+from matplotlib.pyplot import pie
 import numba
 import numpy as np
 import scipy as sp
 
 from .rotqs import generate_quaternions
-from .util import cholesky, set_random_seed
+from .util import ldl_decomp, set_random_seed
 from heliosat.util import sanitize_dt
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
@@ -59,7 +59,7 @@ class SimulationBlackBox(object):
         elif isinstance(self.sparams, tuple):
             self.sparams_arr = np.empty((self.ensemble_size, *self.sparams), dtype=self.dtype)
         else:
-            raise TypeError("sparams must be of type int or tuple, not %s", type(self.sparams))
+            raise TypeError("sparams must be of type int or tuple, not {0!s}".format(type(self.sparams)))
 
         self.qs_sx = np.empty((self.ensemble_size, 4), dtype=self.dtype)
         self.qs_xs = np.empty((self.ensemble_size, 4), dtype=self.dtype)
@@ -91,7 +91,7 @@ class SimulationBlackBox(object):
             elif dist in ["gaussian", "normal"]:
                 self.iparams_arr[:, ii] = trunc_generator(np.random.normal, iparam["maximum"], iparam["minimum"], self.ensemble_size, loc=iparam["mean"], scale=iparam["std"])
             else:
-                raise NotImplementedError("parameter distribution \"%s\" is not implemented", dist)
+                raise NotImplementedError("parameter distribution \"{0!s}\" is not implemented".format(dist))
 
         generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
 
@@ -155,7 +155,7 @@ class SimulationBlackBox(object):
             raise NotImplementedError
 
         # compute lower triangular matrices
-        self.iparams_kernel_decomp = cholesky(self.iparams_kernel)
+        self.iparams_kernel_decomp = ldl_decomp(self.iparams_kernel)
 
     def update_weights(self, old_iparams: np.ndarray, old_weights: np.ndarray, kernel_mode: str = "cm") -> None:
         if kernel_mode == "cm":
@@ -207,7 +207,7 @@ class SimulationBlackBox(object):
                 self.iparams_meta[ii, 5] = iparam["mean"]
                 self.iparams_meta[ii, 6] = iparam["std"]
             else:
-                raise NotImplementedError("parameter distribution \"%s\" is not implemented", dist)
+                raise NotImplementedError("parameter distribution \"{0!s}\" is not implemented".format(dist))
 
             if bound == "continuous":
                 self.iparams_meta[ii, 2] = 0
@@ -218,7 +218,7 @@ class SimulationBlackBox(object):
         raise NotImplementedError
 
 
-@numba.njit
+@numba.njit(fastmath=True)
 def _numba_perturb_select_weights(size: np.ndarray, weights_old: np.ndarray) -> np.ndarray:
     r = np.random.rand(size)
     si = -np.ones((size,), dtype=np.int64)
@@ -237,16 +237,16 @@ def _numba_perturb_select_weights(size: np.ndarray, weights_old: np.ndarray) -> 
     return si
 
 
-@numba.njit(parallel=True)
+@numba.njit(fastmath=True, parallel=False)
 def _numba_perturb_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, weights_old: np.ndarray, kernel_lower: np.ndarray, meta: np.ndarray) -> None:
     isel = _numba_perturb_select_weights(len(iparams_new), weights_old)
-
-    for i in numba.prange(len(iparams_new)):
+    #print("perturb start")
+    for i in range(len(iparams_new)):
         si = isel[i]
 
         c = 0
         ct = 0
-        Nc = 20
+        Nc = 4
 
         offset = np.dot(kernel_lower, np.random.randn(len(meta), Nc))
 
@@ -267,9 +267,11 @@ def _numba_perturb_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, w
                             candidate[pi] += meta[pi, 3] - meta[pi, 4]
                     else:
                         acc = False
+                        #print("MISS")
                         break
             
             if acc:
+                #print("HIT")
                 break
 
             c += 1
@@ -278,11 +280,12 @@ def _numba_perturb_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, w
                 c = 0
                 ct += 1
                 offset = np.dot(kernel_lower, np.random.randn(len(meta), Nc))
+                
         
         iparams_new[i] = candidate
+    #print("perturb end")
 
-
-@numba.njit(parallel=True)
+@numba.njit(fastmath=True)
 def _numba_weight_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, weights_new: np.ndarray, weights_old: np.ndarray, kernel: np.ndarray) -> None:
     inv_kernel = np.linalg.pinv(kernel).astype(iparams_old.dtype) / 2
 
@@ -297,7 +300,7 @@ def _numba_weight_kernel_cm(iparams_new: np.ndarray, iparams_old: np.ndarray, we
         weights_new[i] = 1 / nw
 
 
-@numba.njit(inline="always")
+@numba.njit(fastmath=True, inline="always")
 def _numba_cov_dist(x1: np.ndarray, x2: np.ndarray, cov: np.ndarray) -> np.ndarray:
     dx = (x1 - x2).astype(cov.dtype)
     return np.dot(dx, np.dot(cov, dx))

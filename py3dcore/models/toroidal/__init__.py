@@ -11,7 +11,7 @@ from ...model import SimulationBlackBox
 from heliosat.util import sanitize_dt
 from itertools import product
 from numba import guvectorize
-from typing import Optional, Sequence, Tuple, Union
+from typing import Union
 
 from .thin_torus import thin_torus_sq, thin_torus_qs, thin_torus_gh
 
@@ -32,7 +32,7 @@ class ToroidalModel(SimulationBlackBox):
 
         6: r0           initial cme radius
         7: v0           initial cme velocity
-        8: T            T factor (related to tau)
+        8: T            T factor (related to the twist)
 
         9: n_a          expansion rate
         10: n_b         magnetic field decay rate
