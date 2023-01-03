@@ -2,10 +2,9 @@
 
 import numba
 import numpy as np
-
 from numba import guvectorize
 
-#np.seterr(all = "raise") 
+#np.seterr(all = "raise")
 
 
 @numba.njit
@@ -99,13 +98,13 @@ def csplines_qs(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, cscoeff
 
     # compute angle
     local_v = np.array(csplines_C0(tv, cscoeff_v, sparams[:, 3:], pn))
-    
+
     local_t = np.array(csplines_C1(tv, cscoeff, sparams[:, :3], pn))
     local_t = local_t / np.linalg.norm(local_t)
 
     local_n = -np.cross(local_v, local_t)
     local_n = local_n / np.linalg.norm(local_n)
-    
+
     local_r = -np.cross(local_t, local_n)
     local_r = local_r / np.linalg.norm(local_r)
 
@@ -156,7 +155,7 @@ def csplines_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, cscoeff
         tv = _numba_csplines_newton_step(tv, s, cscoeff, sparams, pn)
 
     if np.isnan(tv) or tv > 1 or tv < 0:
-        q[:] = np.nan 
+        q[:] = np.nan
         return
 
     local_s = s - np.array(csplines_C0(tv, cscoeff, sparams, pn))
@@ -170,7 +169,7 @@ def csplines_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, cscoeff
 
     local_n = -np.cross(local_v, local_t)
     local_n = local_n / np.linalg.norm(local_n)
-    
+
     local_r = -np.cross(local_t, local_n)
     local_r = local_r / np.linalg.norm(local_r)
 

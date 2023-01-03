@@ -5,11 +5,11 @@
 Implements functions for using quaternions to rotate vectors.
 """
 
+from typing import Iterable, Optional
+
 import numba
 import numpy as np
-
 from numba import guvectorize
-from typing import Optional, Iterable
 
 
 def generate_quaternions(arr: np.ndarray, qs_sx: np.ndarray, qs_xs: np.ndarray, indices: Optional[Iterable] = None) -> None:

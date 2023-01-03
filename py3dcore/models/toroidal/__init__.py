@@ -2,18 +2,19 @@
 
 import datetime
 import json
+import os
+from itertools import product
+from typing import Union
+
 import numba
 import numpy as np
-import os
+from heliosat.util import sanitize_dt
+from numba import guvectorize
+
 import py3dcore
 
 from ...model import SimulationBlackBox
-from heliosat.util import sanitize_dt
-from itertools import product
-from numba import guvectorize
-from typing import Union
-
-from .thin_torus import thin_torus_sq, thin_torus_qs, thin_torus_gh
+from .thin_torus import thin_torus_gh, thin_torus_qs, thin_torus_sq
 
 
 class ToroidalModel(SimulationBlackBox):
@@ -64,7 +65,7 @@ class ToroidalModel(SimulationBlackBox):
 
         self.mag_model = mag_model
         self.shape_model = shape_model
-    
+
     def propagator(self, dt_to: Union[str, datetime.datetime]) -> None:
         _numba_propagator(self.dtype(sanitize_dt(dt_to).timestamp() - self.dt_0.timestamp()), self.iparams_arr, self.sparams_arr, self.sparams_arr)
 

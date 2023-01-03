@@ -5,15 +5,15 @@
 Implements functions for ABC-SMC summary statistics
 """
 
-import numpy as np
-import numba
-
 from typing import Any, Optional
+
+import numba
+import numpy as np
 
 
 def sumstat(values: np.ndarray, reference: np.ndarray, stype: str = "norm_rmse", **kwargs: Any) -> np.ndarray:
     if stype == "norm_rmse":
-        data_l = np.array(kwargs.pop("data_l"))        
+        data_l = np.array(kwargs.pop("data_l"))
         length = kwargs.pop("length")
         mask = kwargs.pop("mask", None)
 

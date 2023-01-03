@@ -103,21 +103,5 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# PyCharm
-.idea
-
-# VS Code
 .vscode
-*.code-workspace
-
-# Sublime
-*.sublime-*
-
-# Mac OSX
-.DS_store
-
-# SPICE Kernels
-.bsp
-.tg
-.tls
-.tpc
+.scripts

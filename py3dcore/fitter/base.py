@@ -2,38 +2,53 @@
 
 import datetime
 import logging
-import heliosat
-import numpy as np
 import os
 import pickle
-
-from ..model import SimulationBlackBox
-from .sumstat import sumstat
-from ..util import mag_fft
-from heliosat.util import sanitize_dt
-from heliosat.transform import transform_reference_frame
 from typing import Any, List, Optional, Sequence, Type, Union
 
+import heliosat
+import numpy as np
+from heliosat.routines import transform_reference_frame
+from heliosat.util import sanitize_dt
 
-def generate_ensemble(path: str, dt: Sequence[datetime.datetime], reference_frame: str = "HCI", reference_frame_to: str = "HCI", perc: float = 0.95, max_index=None) -> np.ndarray:
+from ..model import SimulationBlackBox
+from ..util import mag_fft
+from .sumstat import sumstat
+
+
+def generate_ensemble(
+    path: str,
+    dt: Sequence[datetime.datetime],
+    reference_frame: str = "HCI",
+    reference_frame_to: str = "HCI",
+    perc: float = 0.95,
+    max_index=None,
+) -> np.ndarray:
     observers = BaseFitter(path).observers
     ensemble_data = []
-    
 
     for (observer, _, _, _, _) in observers:
         ftobj = BaseFitter(path)
         observer_obj = getattr(heliosat, observer)()
-        ensemble = np.squeeze(np.array(ftobj.model_obj.simulator(dt, observer_obj.trajectory(dt, reference_frame=reference_frame))[0]))
+        ensemble = np.squeeze(
+            np.array(
+                ftobj.model_obj.simulator(
+                    dt, observer_obj.trajectory(dt, reference_frame=reference_frame)
+                )[0]
+            )
+        )
 
         if max_index is None:
-            max_index =  ensemble.shape[1]
+            max_index = ensemble.shape[1]
 
         ensemble = ensemble[:, :max_index, :]
 
         # transform frame
         if reference_frame != reference_frame_to:
             for k in range(0, ensemble.shape[1]):
-                ensemble[:, k, :] = transform_reference_frame(dt, ensemble[:, k, :], reference_frame, reference_frame_to)
+                ensemble[:, k, :] = transform_reference_frame(
+                    dt, ensemble[:, k, :], reference_frame, reference_frame_to
+                )
 
         ensemble[np.where(ensemble == 0)] = np.nan
 
@@ -69,23 +84,41 @@ class BaseFitter(object):
         else:
             self.locked = False
 
-    def add_observer(self, observer: str, dt: Union[str, datetime.datetime, Sequence[str], Sequence[datetime.datetime]], dt_s: Union[str, datetime.datetime], dt_e: Union[str, datetime.datetime], dt_shift: datetime.timedelta = None) -> None:        
-        self.observers.append([observer, sanitize_dt(dt), sanitize_dt(dt_s), sanitize_dt(dt_e), dt_shift])
+    def add_observer(
+        self,
+        observer: str,
+        dt: Union[str, datetime.datetime, Sequence[str], Sequence[datetime.datetime]],
+        dt_s: Union[str, datetime.datetime],
+        dt_e: Union[str, datetime.datetime],
+        dt_shift: datetime.timedelta = None,
+    ) -> None:
+        self.observers.append(
+            [observer, sanitize_dt(dt), sanitize_dt(dt_s), sanitize_dt(dt_e), dt_shift]
+        )
 
-    def initialize(self, dt_0: Union[str, datetime.datetime], model: Type[SimulationBlackBox], model_kwargs: dict = {}) -> None:
+    def initialize(
+        self,
+        dt_0: Union[str, datetime.datetime],
+        model: Type[SimulationBlackBox],
+        model_kwargs: dict = {},
+    ) -> None:
         if self.locked:
             raise RuntimeError("is locked")
-        
+
         self.dt_0 = sanitize_dt(dt_0)
         self.model_kwargs = model_kwargs
         self.observers = []
-        self.model =  model
+        self.model = model
 
     def save(self, path: str, **kwargs: Any) -> None:
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
 
-        data = {attr: getattr(self, attr) for attr in self.__dict__ if not callable(attr) and not attr.startswith("_")}
+        data = {
+            attr: getattr(self, attr)
+            for attr in self.__dict__
+            if not callable(attr) and not attr.startswith("_")
+        }
 
         for k, v in kwargs.items():
             data[k] = v
@@ -112,7 +145,7 @@ class FittingData(object):
     data_l: List[int]
 
     psd_dt: List[np.ndarray]
-    psd_fft: List[np.ndarray]    
+    psd_fft: List[np.ndarray]
 
     length: int
     noise_model: str
@@ -137,12 +170,24 @@ class FittingData(object):
 
                 ensemble_size = len(profiles[0])
 
-                null_flt = (profiles[1 + _offset:_offset + (dtl + 2) - 1, :, 0] != 0)
+                null_flt = profiles[1 + _offset : _offset + (dtl + 2) - 1, :, 0] != 0
 
                 # generate noise for each component
                 for c in range(3):
-                    noise = np.real(np.fft.ifft(np.fft.fft(np.random.normal(0, 1, size=(ensemble_size, len(fft))).astype(np.float32)) * fft) / sampling_fac).T
-                    profiles[1 + _offset:_offset + (dtl + 2) - 1, :, c][null_flt] += noise[dt][null_flt]
+                    noise = np.real(
+                        np.fft.ifft(
+                            np.fft.fft(
+                                np.random.normal(
+                                    0, 1, size=(ensemble_size, len(fft))
+                                ).astype(np.float32)
+                            )
+                            * fft
+                        )
+                        / sampling_fac
+                    ).T
+                    profiles[1 + _offset : _offset + (dtl + 2) - 1, :, c][
+                        null_flt
+                    ] += noise[dt][null_flt]
 
                 _offset += dtl + 2
         else:
@@ -150,7 +195,9 @@ class FittingData(object):
 
         return profiles
 
-    def generate_noise(self, noise_model: str = "psd", sampling_freq: int = 300, **kwargs: Any) -> None:
+    def generate_noise(
+        self, noise_model: str = "psd", sampling_freq: int = 300, **kwargs: Any
+    ) -> None:
         self.psd_dt = []
         self.psd_fft = []
         self.sampling_freq = sampling_freq
@@ -163,14 +210,23 @@ class FittingData(object):
 
                 observer_obj = getattr(heliosat, observer)()
 
-                _, data = observer_obj.get([dt_s, dt_e], "mag", reference_frame=self.reference_frame, sampling_freq=sampling_freq, use_cache=True, as_endpoints=True)
+                _, data = observer_obj.get(
+                    [dt_s, dt_e],
+                    "mag",
+                    reference_frame=self.reference_frame,
+                    sampling_freq=sampling_freq,
+                    cached=True,
+                    as_endpoints=True,
+                )
 
                 data[np.isnan(data)] = 0
 
                 fF, fS = mag_fft(dt, data, sampling_freq=sampling_freq)
 
                 kdt = (len(fS) - 1) / (dt[-1].timestamp() - dt[0].timestamp())
-                fT = np.array([int((_.timestamp() - dt[0].timestamp()) * kdt) for _ in dt])
+                fT = np.array(
+                    [int((_.timestamp() - dt[0].timestamp()) * kdt) for _ in dt]
+                )
 
                 self.psd_dt.append(fT)
                 self.psd_fft.append(fS)
@@ -196,10 +252,14 @@ class FittingData(object):
 
             observer_obj = getattr(heliosat, observer)()
 
-            _, data = observer_obj.get(dt, "mag", reference_frame=self.reference_frame, use_cache=True, **kwargs)
+            _, data = observer_obj.get(
+                dt, "mag", reference_frame=self.reference_frame, cached=True, **kwargs
+            )
 
             dt_all = [dt_s] + dt + [dt_e]
-            trajectory = observer_obj.trajectory(dt_all, reference_frame=self.reference_frame)
+            trajectory = observer_obj.trajectory(
+                dt_all, reference_frame=self.reference_frame
+            )
             b_all = np.zeros((len(data) + 2, 3))
             b_all[1:-1] = data
             mask = [1] * len(b_all)
@@ -215,8 +275,19 @@ class FittingData(object):
             self.data_m.extend(mask)
             self.data_l.append(len(data))
 
-    def sumstat(self, values: np.ndarray, stype: str = "norm_rmse", use_mask: bool = True) -> np.ndarray:
+    def sumstat(
+        self, values: np.ndarray, stype: str = "norm_rmse", use_mask: bool = True
+    ) -> np.ndarray:
         if use_mask:
-            return sumstat(values, self.data_b, stype, mask=self.data_m, data_l=self.data_l, length=self.length)
+            return sumstat(
+                values,
+                self.data_b,
+                stype,
+                mask=self.data_m,
+                data_l=self.data_l,
+                length=self.length,
+            )
         else:
-            return sumstat(values, self.data_b, stype, data_l=self.data_l, length=self.length)
+            return sumstat(
+                values, self.data_b, stype, data_l=self.data_l, length=self.length
+            )

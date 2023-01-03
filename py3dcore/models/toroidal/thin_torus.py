@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
+from typing import Tuple
+
 import numba
 import numpy as np
-
 from numba import guvectorize
+
 from py3dcore.rotqs import _numba_quaternion_rotate
-from typing import Tuple
 
 
 @guvectorize([
@@ -142,7 +143,7 @@ def thin_torus_gh(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_xs:
 
         denom = (1 + t**2 * q0**2)
         bpsi = b_t / denom * fluxfactor
-        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor 
+        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi

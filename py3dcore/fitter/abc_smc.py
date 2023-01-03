@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 
 import datetime
+import faulthandler
 import logging
-import heliosat
 import multiprocessing
-import numpy as np
 import os
 import pickle
 import time
-
-from .base import BaseFitter, FittingData
-from ..model import SimulationBlackBox
-from ..util import set_random_seed
-from heliosat.util import sanitize_dt
 from typing import Any, Optional, Sequence, Tuple, Union
 
-import faulthandler
+import heliosat
+import numpy as np
+from heliosat.util import sanitize_dt
+
+from ..model import SimulationBlackBox
+from ..util import set_random_seed
+from .base import BaseFitter, FittingData
 
 faulthandler.enable()
 
@@ -40,10 +40,10 @@ class ABC_SMC(BaseFitter):
         self.iter_i = 0
         self.hist_eps = []
         self.hist_time = []
-    
+
     def run(self, iter_max: int, ensemble_size: int, reference_frame: str, **kwargs: Any) -> None:
         logger = logging.getLogger(__name__)
- 
+
         # read kwargs
         balanced_iterations = kwargs.pop("balanced_iterations", 3)
         data_kwargs = kwargs.pop("data_kwargs", {})
@@ -85,7 +85,7 @@ class ABC_SMC(BaseFitter):
                     self.hist_eps_dim = len(eps_init)
 
                     logger.info("initial eps_init = %s", self.hist_eps[-1])
-                    
+
                     model_obj_kwargs = dict(self.model_kwargs)  # type: ignore
                     model_obj_kwargs["ensemble_size"] = ensemble_size
                     model_obj = self.model(self.dt_0, **model_obj_kwargs)
@@ -151,7 +151,7 @@ class ABC_SMC(BaseFitter):
 
                     if balanced_iterations > iter_i:
                         new_eps[:] = np.max(new_eps)
-                    
+
                     self.hist_eps.append(new_eps)
                 elif isinstance(eps_quantile, list) or isinstance(eps_quantile, np.ndarray):
                     eps_quantile_eff = eps_quantile ** (1 / self.hist_eps_dim)  # type: ignore

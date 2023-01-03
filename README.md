@@ -1,7 +1,7 @@
-3DCORE (ver 2.0)
+3DCORE
 ========
 
-3D Coronal Rope Ejection modelling techniqe for coronal mass ejection (CME) flux ropes.
+Python implementations of the class of models running under the name "3D Coronal Rope Ejection Model"
 
 Installation
 ------------

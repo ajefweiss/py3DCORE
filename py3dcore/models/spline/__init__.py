@@ -2,22 +2,23 @@
 
 import datetime
 import json
+import os
+from itertools import product
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
+
 import numba
 import numpy as np
-import os
+from heliosat.util import sanitize_dt
+from numba import guvectorize
+from scipy.optimize import least_squares
+
 import py3dcore
 
 from ...model import SimulationBlackBox
 from ...rotqs import _numba_quaternion_rotate
 from ...swbg import SolarWindBG, _numba_get_sw_vr
 from ...util import ldl_decomp
-from heliosat.util import sanitize_dt
-from itertools import product
-from numba import guvectorize
-from scipy.optimize import least_squares
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
-
-from .csplines import csplines_qs, csplines_sq, csplines_gh, csplines_gh_ub
+from .csplines import csplines_gh, csplines_gh_ub, csplines_qs, csplines_sq
 
 
 class SplineModel(SimulationBlackBox):
@@ -96,7 +97,7 @@ class SplineModel(SimulationBlackBox):
             init_particles(_numba_pfunc_torus, self.iparams_arr, self.sparams_arr, self.qs_xs, self.particles)
         else:
             raise NotImplementedError
-    
+
     def propagator(self, dt_to: Union[str, datetime.datetime], time_resolution: int = 5 * 3600) -> None:
         offset = self.dtype(sanitize_dt(dt_to).timestamp() - self.dt_t.timestamp())  # type: ignore
 
@@ -118,7 +119,7 @@ class SplineModel(SimulationBlackBox):
 
     def simulator_mag(self, pos: np.ndarray, out: np.ndarray) -> None:
         _q_tmp = np.zeros((len(self.iparams_arr), 3 * 4))
-        
+
         csplines_sq(pos, self.iparams_arr, self.sparams_arr, self.cscoeff, self.cscoeff_v, _q_tmp, _q_tmp)
 
         if self.mag_model == "gh":
@@ -231,8 +232,8 @@ def init_particles(pfunc: Callable, iparams_arr: np.ndarray, sparams_arr: np.nda
         xs_2 = np.array([pfunc(r_0 * 1.1, phi) for phi in phi_arr])
 
         # rotate into (s)
-        xs_1 = np.array([_numba_quaternion_rotate(_, qs_xs[i]) for _ in xs_1])   
-        xs_2 = np.array([_numba_quaternion_rotate(_, qs_xs[i]) for _ in xs_2])  
+        xs_1 = np.array([_numba_quaternion_rotate(_, qs_xs[i]) for _ in xs_1])
+        xs_2 = np.array([_numba_quaternion_rotate(_, qs_xs[i]) for _ in xs_2])
 
         sparams_arr[i, :, :3] = xs_1
 
@@ -261,7 +262,7 @@ def _numba_generate_csplines(sparams_arr: np.ndarray, Lmat: np.ndarray, pn: int,
             y[0] = 0
             for k in range(1, pn):
                 y[k] = 1 / Lmat[k, k] * (d[k] - Lmat[k, k - 1] * y[k - 1])
-            
+
             x[pn - 1] = y[pn - 1] / Lmat[k, k]
 
             for k in range(0, pn - 1):
@@ -284,7 +285,7 @@ def _numba_generate_csplines(sparams_arr: np.ndarray, Lmat: np.ndarray, pn: int,
             y[0] = 0
             for k in range(1, pn):
                 y[k] = 1 / Lmat[k, k] * (d[k] - Lmat[k, k - 1] * y[k - 1])
-            
+
             x[pn - 1] = y[pn - 1] / Lmat[k, k]
 
             for k in range(0, pn - 1):
@@ -299,11 +300,11 @@ def _numba_generate_csplines_lmatrix(pn: int) -> np.ndarray:
 
     for k in range(pn):
         A[k, k] = 2
-    
+
     for k in range(pn - 1):
         A[k, k + 1] = 1 / 2
         A[k + 1, k] = 1 / 2
-    
+
     A[0, 1] = .5
     A[k-1, k-2] = .5
 
@@ -343,8 +344,8 @@ def _numba_propagator(t_offset: float, iparams_arr: np.ndarray, sparams_arr: np.
         sparams_arr[i, :, 0] += sparams_arr[i, :, 3] * (1 + a_fac) / 2 / 1.496e+8 * t_offset
         sparams_arr[i, :, 1] += sparams_arr[i, :, 4] * (1 + a_fac) / 2 / 1.496e+8 * t_offset
         sparams_arr[i, :, 2] += sparams_arr[i, :, 5] * (1 + a_fac) / 2 / 1.496e+8 * t_offset
-        sparams_arr[i, :, 3] *= a_fac  
-        sparams_arr[i, :, 4] *= a_fac  
+        sparams_arr[i, :, 3] *= a_fac
+        sparams_arr[i, :, 4] *= a_fac
         sparams_arr[i, :, 5] *= a_fac
 
 
@@ -375,4 +376,3 @@ def _numba_pfunc_gcslike_curved(r: float, p: float) -> np.ndarray:
 @numba.njit
 def _numba_pfunc_torus(r: float, p: float) -> np.ndarray:
     return np.array([0, -r / 2 * np.cos(p) + r / 2, r / 2 * np.sin(p), 0])
-
