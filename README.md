@@ -1,7 +1,7 @@
-3DCORE
+3D Coronal Rope Ejection Model
 ========
 
-Python implementations of the class of models running under the name "3D Coronal Rope Ejection Model"
+Python implementations of the class of models running under the name of "3D Coronal Rope Ejection Model"
 
 Installation
 ------------
