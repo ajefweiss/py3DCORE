@@ -11,7 +11,9 @@ import numba
 import numpy as np
 
 
-def sumstat(values: np.ndarray, reference: np.ndarray, stype: str = "norm_rmse", **kwargs: Any) -> np.ndarray:
+def sumstat(
+    values: np.ndarray, reference: np.ndarray, stype: str = "norm_rmse", **kwargs: Any
+) -> np.ndarray:
     if stype == "norm_rmse":
         data_l = np.array(kwargs.pop("data_l"))
         length = kwargs.pop("length")
@@ -43,7 +45,9 @@ def sumstat(values: np.ndarray, reference: np.ndarray, stype: str = "norm_rmse",
         raise NotImplementedError
 
 
-def rmse(values: np.ndarray, reference: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+def rmse(
+    values: np.ndarray, reference: np.ndarray, mask: Optional[np.ndarray] = None
+) -> np.ndarray:
     rmse = np.zeros(len(values[0]))
 
     if mask is not None:
@@ -70,13 +74,15 @@ def rmse(values: np.ndarray, reference: np.ndarray, mask: Optional[np.ndarray] =
 @numba.njit
 def _error_mask(values_t: np.ndarray, mask: np.ndarray, rmse: np.ndarray) -> None:
     for i in numba.prange(len(values_t)):
-        _v = np.sum(values_t[i]**2)
+        _v = np.sum(values_t[i] ** 2)
         if (_v > 0 and mask == 0) or (_v == 0 and mask != 0):
             rmse[i] = np.inf
 
 
 @numba.njit
-def _error_rmse(values_t: np.ndarray, ref_t: np.ndarray, mask: np.ndarray, rmse: np.ndarray) -> None:
+def _error_rmse(
+    values_t: np.ndarray, ref_t: np.ndarray, mask: np.ndarray, rmse: np.ndarray
+) -> None:
     for i in numba.prange(len(values_t)):
         if mask == 1:
-            rmse[i] += np.sum((values_t[i] - ref_t)**2)
+            rmse[i] += np.sum((values_t[i] - ref_t) ** 2)

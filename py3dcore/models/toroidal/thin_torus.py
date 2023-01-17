@@ -9,32 +9,55 @@ from numba import guvectorize
 from py3dcore.rotqs import _numba_quaternion_rotate
 
 
-@guvectorize([
-    "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
-    "void(float64[:], float64[:], float64[:], float64[:], float64[:])"],
-    '(i), (j), (k), (l) -> (i)', target="parallel")
-def thin_torus_qs(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_xs: np.ndarray, s: np.ndarray) -> None:
+@guvectorize(
+    [
+        "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
+        "void(float64[:], float64[:], float64[:], float64[:], float64[:])",
+    ],
+    "(i), (j), (k), (l) -> (i)",
+    target="parallel",
+)
+def thin_torus_qs(
+    q: np.ndarray,
+    iparams: np.ndarray,
+    sparams: np.ndarray,
+    q_xs: np.ndarray,
+    s: np.ndarray,
+) -> None:
     (q0, q1, q2) = q
 
     delta = iparams[5]
 
     (_, rho_0, rho_1, _) = sparams
 
-    x = np.array([
-        0,
-        -(rho_0 + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2)) * np.cos(q1) + rho_0,
-        (rho_0 + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2)) * np.sin(q1),
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * delta]
+    x = np.array(
+        [
+            0,
+            -(rho_0 + q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2)) * np.cos(q1)
+            + rho_0,
+            (rho_0 + q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2)) * np.sin(q1),
+            q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.sin(q2) * delta,
+        ]
     )
 
     s[:] = _numba_quaternion_rotate(x, q_xs)
 
 
-@guvectorize([
-    "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
-    "void(float64[:], float64[:], float64[:], float64[:], float64[:])"],
-    '(i), (j), (k), (l) -> (i)', target="parallel")
-def thin_torus_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_sx: np.ndarray, q: np.ndarray) -> None:
+@guvectorize(
+    [
+        "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
+        "void(float64[:], float64[:], float64[:], float64[:], float64[:])",
+    ],
+    "(i), (j), (k), (l) -> (i)",
+    target="parallel",
+)
+def thin_torus_sq(
+    s: np.ndarray,
+    iparams: np.ndarray,
+    sparams: np.ndarray,
+    q_sx: np.ndarray,
+    q: np.ndarray,
+) -> None:
     delta = iparams[5]
 
     (_, rho_0, rho_1, _) = sparams
@@ -53,8 +76,8 @@ def thin_torus_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_sx:
     else:
         psi = np.arctan2(-x1, x0 - rho_0) + np.pi
 
-    g1 = np.cos(psi)**2 + np.sin(psi)**2
-    rd = np.sqrt(((rho_0 - x0) ** 2 + x1 ** 2) / g1) - rho_0
+    g1 = np.cos(psi) ** 2 + np.sin(psi) ** 2
+    rd = np.sqrt(((rho_0 - x0) ** 2 + x1**2) / g1) - rho_0
 
     if rd == 0:
         if x2 >= 0:
@@ -71,9 +94,9 @@ def thin_torus_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_sx:
             phi += 2 * np.pi
 
     if phi == np.pi / 2 or phi == 3 * np.pi / 2:
-        r = x2 / delta / rho_1 / np.sin(phi) / np.sin(psi / 2)**2
+        r = x2 / delta / rho_1 / np.sin(phi) / np.sin(psi / 2) ** 2
     else:
-        r = np.abs(rd / np.cos(phi) / np.sin(psi / 2)**2 / rho_1)
+        r = np.abs(rd / np.cos(phi) / np.sin(psi / 2) ** 2 / rho_1)
 
     q[0] = r
     q[1] = psi
@@ -81,38 +104,60 @@ def thin_torus_sq(s: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_sx:
 
 
 @numba.njit
-def thin_torus_jacobian(q0: float, q1: float, q2: float, rho_0: float, rho_1: float, delta: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def thin_torus_jacobian(
+    q0: float, q1: float, q2: float, rho_0: float, rho_1: float, delta: float
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     w = 1
 
-    dr = np.array([
-        -rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.cos(q1),
-        w * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.sin(q1),
-        rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * delta
-    ])
+    dr = np.array(
+        [
+            -rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2) * np.cos(q1),
+            w * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2) * np.sin(q1),
+            rho_1 * np.sin(q1 / 2) ** 2 * np.sin(q2) * delta,
+        ]
+    )
 
-    dpsi = np.array([
-        rho_0 * np.sin(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 *
-        np.cos(q2) * np.sin(q1) - q0
-        * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.cos(q1),
-        w * (rho_0 * np.cos(q1) + q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * np.cos(q1)
-             + q0 * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.sin(q1)),
-        q0 * rho_1 * delta * np.cos(q1 / 2) * np.sin(q1 / 2) * np.sin(q2)
-    ])
+    dpsi = np.array(
+        [
+            rho_0 * np.sin(q1)
+            + q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2) * np.sin(q1)
+            - q0 * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.cos(q1),
+            w
+            * (
+                rho_0 * np.cos(q1)
+                + q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2) * np.cos(q1)
+                + q0 * rho_1 * np.cos(q1 / 2) * np.sin(q1 / 2) * np.cos(q2) * np.sin(q1)
+            ),
+            q0 * rho_1 * delta * np.cos(q1 / 2) * np.sin(q1 / 2) * np.sin(q2),
+        ]
+    )
 
-    dphi = np.array([
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * np.cos(q1),
-        -w * q0 * rho_1 * np.sin(q1 / 2)**2 * np.sin(q2) * np.sin(q1),
-        q0 * rho_1 * np.sin(q1 / 2)**2 * np.cos(q2) * delta
-    ])
+    dphi = np.array(
+        [
+            q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.sin(q2) * np.cos(q1),
+            -w * q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.sin(q2) * np.sin(q1),
+            q0 * rho_1 * np.sin(q1 / 2) ** 2 * np.cos(q2) * delta,
+        ]
+    )
 
     return dr, dpsi, dphi
 
 
-@guvectorize([
-    "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
-    "void(float64[:], float64[:], float64[:], float64[:], float64[:])"],
-    '(i), (j), (k), (l) -> (i)', target="parallel")
-def thin_torus_gh(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_xs: np.ndarray, b: np.ndarray) -> None:
+@guvectorize(
+    [
+        "void(float32[:], float32[:], float32[:], float32[:], float32[:])",
+        "void(float64[:], float64[:], float64[:], float64[:], float64[:])",
+    ],
+    "(i), (j), (k), (l) -> (i)",
+    target="parallel",
+)
+def thin_torus_gh(
+    q: np.ndarray,
+    iparams: np.ndarray,
+    sparams: np.ndarray,
+    q_xs: np.ndarray,
+    b: np.ndarray,
+) -> None:
     bsnp = np.empty((3,))
 
     (q0, q1, q2) = (q[0], q[1], q[2])
@@ -133,15 +178,15 @@ def thin_torus_gh(q: np.ndarray, iparams: np.ndarray, sparams: np.ndarray, q_xs:
 
         br = 0
 
-        fluxfactor = 1 / np.sin(q1 / 2)**2
+        fluxfactor = 1 / np.sin(q1 / 2) ** 2
 
         # ellipse circumference
-        h = (delta - 1)**2 / (1 + delta)**2
+        h = (delta - 1) ** 2 / (1 + delta) ** 2
         E = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
-        t = Tfac * rho_1 / rho_0 / 2 / np.pi * np.sin(q1 / 2)**2
+        t = Tfac * rho_1 / rho_0 / 2 / np.pi * np.sin(q1 / 2) ** 2
 
-        denom = (1 + t**2 * q0**2)
+        denom = 1 + t**2 * q0**2
         bpsi = b_t / denom * fluxfactor
         bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
 

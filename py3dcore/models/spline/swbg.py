@@ -20,7 +20,14 @@ class SolarWindBG(object):
     rmin: float
     rmax: float
 
-    def __init__(self, dt_0: datetime.datetime, path: str, file_type: str = "radial_txt_2d", rmin: float = 0.0232523, rmax: float = 1.5) -> None:
+    def __init__(
+        self,
+        dt_0: datetime.datetime,
+        path: str,
+        file_type: str = "radial_txt_2d",
+        rmin: float = 0.0232523,
+        rmax: float = 1.5,
+    ) -> None:
         self.dt_0 = dt_0
         self.rmin = rmin
         self.rmax = rmax
@@ -34,8 +41,10 @@ class SolarWindBG(object):
         else:
             raise NotImplementedError
 
-    def get_sw_vr(self, dt: datetime.datetime, pos:np.ndarray) -> float:
-        return _numba_get_sw_vr((dt - self.dt_0).total_seconds(), pos, self.sw_data, self.rmax, self.rmin)
+    def get_sw_vr(self, dt: datetime.datetime, pos: np.ndarray) -> float:
+        return _numba_get_sw_vr(
+            (dt - self.dt_0).total_seconds(), pos, self.sw_data, self.rmax, self.rmin
+        )
 
     def visualize_xy(self, dt: datetime.datetime, z: float = 0) -> np.ndarray:
         rs = np.linspace(self.rmin, self.rmax, self.sw_data.shape[0])
@@ -79,7 +88,9 @@ class SolarWindBG(object):
 
 
 @numba.njit
-def _numba_get_sw_vr(dt_offset: float, pos: np.ndarray, sw_data: np.ndarray, rmax: float, rmin: float) -> float:
+def _numba_get_sw_vr(
+    dt_offset: float, pos: np.ndarray, sw_data: np.ndarray, rmax: float, rmin: float
+) -> float:
     rota = 360 / (27 * 24 * 3600) * dt_offset
 
     r = np.linalg.norm(pos)
@@ -100,7 +111,7 @@ def _numba_get_sw_vr(dt_offset: float, pos: np.ndarray, sw_data: np.ndarray, rma
     if sw_data.ndim == 2:
         return sw_data[rx, lx]
 
-    rv = np.sqrt(pos[1]**2 + pos[0]**2)
+    rv = np.sqrt(pos[1] ** 2 + pos[0] ** 2)
 
     if rv == 0:
         lat = 0
