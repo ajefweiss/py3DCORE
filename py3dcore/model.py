@@ -453,4 +453,4 @@ def mag_fft(
         k = np.abs(fF[i])
         fS[i] = np.sqrt(wS[np.argmin(np.abs(k - wF))])
 
-    return (fF,)
+    return fF, fS
