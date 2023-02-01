@@ -12,9 +12,9 @@ import scipy as sp
 from heliosat.util import sanitize_dt
 from matplotlib.pyplot import pie
 from numba import guvectorize
+from scipy.signal import detrend, welch
 
 from .rotqs import generate_quaternions
-from .util import ldl_decomp, set_random_seed
 
 
 class SimulationBlackBox(object):
@@ -203,7 +203,7 @@ class SimulationBlackBox(object):
             raise NotImplementedError
 
         # compute lower triangular matrices
-        self.iparams_kernel_decomp = ldl_decomp(self.iparams_kernel)
+        self.iparams_kernel_decomp = _ldl(self.iparams_kernel)
 
     def update_weights(
         self, old_iparams: np.ndarray, old_weights: np.ndarray, kernel_mode: str = "cm"
@@ -424,3 +424,33 @@ def set_random_seed(seed: int) -> None:
 @numba.njit
 def _numba_set_random_seed(seed: int) -> None:
     np.random.seed(seed)
+
+
+def mag_fft(
+    dt: Sequence[datetime.datetime], bdt: np.ndarray, sampling_freq: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Computes the mean power spectrum distribution from a magnetic field measurements over all three vector components.
+    Note: Assumes that P(k) is the same for all three vector components.
+    """
+    n_s = int(((dt[-1] - dt[0]).total_seconds() / 3600) - 1)
+    n_perseg = np.min([len(bdt), 256])
+
+    p_bX = detrend(bdt[:, 0], type="linear", bp=n_s)
+    p_bY = detrend(bdt[:, 1], type="linear", bp=n_s)
+    p_bZ = detrend(bdt[:, 2], type="linear", bp=n_s)
+
+    _, wX = welch(p_bX, fs=1 / sampling_freq, nperseg=n_perseg)
+    _, wY = welch(p_bY, fs=1 / sampling_freq, nperseg=n_perseg)
+    wF, wZ = welch(p_bZ, fs=1 / sampling_freq, nperseg=n_perseg)
+
+    wS = (wX + wY + wZ) / 3
+
+    # convert P(k) into suitable form for fft
+    fF = np.fft.fftfreq(len(p_bX), d=sampling_freq)
+    fS = np.zeros((len(fF)))
+
+    for i in range(len(fF)):
+        k = np.abs(fF[i])
+        fS[i] = np.sqrt(wS[np.argmin(np.abs(k - wF))])
+
+    return (fF,)

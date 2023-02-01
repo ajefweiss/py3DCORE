@@ -11,8 +11,7 @@ import numpy as np
 from heliosat.routines import transform_reference_frame
 from heliosat.util import sanitize_dt
 
-from ..model import SimulationBlackBox
-from ..util import mag_fft
+from ..model import SimulationBlackBox, mag_fft
 from .sumstat import sumstat
 
 

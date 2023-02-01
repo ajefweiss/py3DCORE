@@ -6,7 +6,6 @@ import os
 from itertools import product
 from typing import Union
 
-import numba
 import numpy as np
 from heliosat.util import sanitize_dt
 from numba import guvectorize

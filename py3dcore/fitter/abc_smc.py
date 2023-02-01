@@ -13,8 +13,7 @@ import heliosat
 import numpy as np
 from heliosat.util import sanitize_dt
 
-from ..model import SimulationBlackBox
-from ..util import set_random_seed
+from ..model import SimulationBlackBox, set_random_seed
 from .base import BaseFitter, FittingData
 
 faulthandler.enable()
