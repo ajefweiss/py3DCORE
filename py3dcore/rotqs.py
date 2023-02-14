@@ -5,21 +5,26 @@
 Implements functions for using quaternions to rotate vectors.
 """
 
+from typing import Iterable, Optional
+
 import numba
 import numpy as np
-
 from numba import guvectorize
-from typing import Optional, Iterable
 
 
-def generate_quaternions(arr: np.ndarray, qs_sx: np.ndarray, qs_xs: np.ndarray, indices: Optional[Iterable] = None) -> None:
+def generate_quaternions(
+    arr: np.ndarray,
+    qs_sx: np.ndarray,
+    qs_xs: np.ndarray,
+    indices: Optional[Iterable] = None,
+) -> None:
     if indices is None:
         # assume by default that propagation direction is stored in indices 1, 2 and 3
         indices = np.array([1, 2, 3])
     else:
         indices = np.array(indices)
 
-    (i1, i2, i3) = (indices[0], indices[1], indices[2]) # type: ignore
+    (i1, i2, i3) = (indices[0], indices[1], indices[2])
     (lon, lat, inc) = (arr[:, i1], arr[:, i2], arr[:, i3])
 
     # generate standard axes vectors
@@ -30,14 +35,17 @@ def generate_quaternions(arr: np.ndarray, qs_sx: np.ndarray, qs_xs: np.ndarray, 
     rlon = _numba_quaternion_create(lon, uz)
     rlat = _numba_quaternion_create(-lat, quaternion_rotate(uy, rlon))
     rinc = _numba_quaternion_create(
-        inc, quaternion_rotate(ux, _numba_quaternion_multiply(rlat, rlon)))
+        inc, quaternion_rotate(ux, _numba_quaternion_multiply(rlat, rlon))
+    )
 
     _numba_quaternion_multiply(rinc, _numba_quaternion_multiply(rlat, rlon), qs_xs)
     _numba_quaternion_conjugate(qs_xs, qs_sx)
 
 
 def quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
-    return _numba_quaternion_multiply(q, _numba_quaternion_multiply(vec, _numba_quaternion_conjugate(q)))
+    return _numba_quaternion_multiply(
+        q, _numba_quaternion_multiply(vec, _numba_quaternion_conjugate(q))
+    )
 
 
 @numba.njit
@@ -45,10 +53,10 @@ def _numba_quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
     qh = (q[0], -q[1], -q[2], -q[3])
 
     # mul 1
-    ma = - vec[1] * qh[1] - vec[2] * qh[2] - vec[3] * qh[3]
-    mb = + vec[1] * qh[0] + vec[2] * qh[3] - vec[3] * qh[2]
-    mc = - vec[1] * qh[3] + vec[2] * qh[0] + vec[3] * qh[1]
-    md = + vec[1] * qh[2] - vec[2] * qh[1] + vec[3] * qh[0]
+    ma = -vec[1] * qh[1] - vec[2] * qh[2] - vec[3] * qh[3]
+    mb = +vec[1] * qh[0] + vec[2] * qh[3] - vec[3] * qh[2]
+    mc = -vec[1] * qh[3] + vec[2] * qh[0] + vec[3] * qh[1]
+    md = +vec[1] * qh[2] - vec[2] * qh[1] + vec[3] * qh[0]
 
     # mul 2
     rb = q[0] * mb + q[1] * ma + q[2] * md - q[3] * mc
@@ -58,10 +66,10 @@ def _numba_quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
     return np.array([rb, rc, rd])
 
 
-@guvectorize([
-    "void(float32, float32[:], float32[:])",
-    "void(float64, float64[:], float64[:])"],
-    '(), (n) -> (n)')
+@guvectorize(
+    ["void(float32, float32[:], float32[:])", "void(float64, float64[:], float64[:])"],
+    "(), (n) -> (n)",
+)
 def _numba_quaternion_create(rot: np.ndarray, vec: np.ndarray, res: np.ndarray) -> None:
     argument = np.radians(rot / 2)
 
@@ -73,19 +81,21 @@ def _numba_quaternion_create(rot: np.ndarray, vec: np.ndarray, res: np.ndarray) 
     res[3] = vec[3] * np.sin(argument)
 
 
-@guvectorize([
-    "void(float32[:], float32[:])",
-    "void(float64[:], float64[:])"],
-    '(n) -> (n)')
+@guvectorize(
+    ["void(float32[:], float32[:])", "void(float64[:], float64[:])"], "(n) -> (n)"
+)
 def _numba_quaternion_conjugate(q: np.ndarray, res: np.ndarray) -> None:
     res[0] = q[0]
     res[1:] = -q[1:]
 
 
-@guvectorize([
-    "void(float32[:], float32[:], float32[:])",
-    "void(float64[:], float64[:], float64[:])"],
-    '(n), (n) -> (n)')
+@guvectorize(
+    [
+        "void(float32[:], float32[:], float32[:])",
+        "void(float64[:], float64[:], float64[:])",
+    ],
+    "(n), (n) -> (n)",
+)
 def _numba_quaternion_multiply(q1: np.ndarray, q2: np.ndarray, res: np.ndarray) -> None:
     (q1a, q1b, q1c, q1d) = (q1[0], q1[1], q1[2], q1[3])
     (q2a, q2b, q2c, q2d) = (q2[0], q2[1], q2[2], q2[3])

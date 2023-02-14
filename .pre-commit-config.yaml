@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/timothycrosley/isort
+    rev: 5.8.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+        exclude: ".*(.fits|.fts|.fit|.txt|tca.*|extern.*|.rst|.md|.svg)$"
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: check-ast
+      - id: check-case-conflict
+      - id: trailing-whitespace
+        exclude: ".*(.fits|.fts|.fit|.txt|.svg|.json)$"
+      - id: debug-statements
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+        exclude: ".*(.fits|.fts|.fit|.txt|tca.*|.svg|.json)$"
+      - id: mixed-line-ending
+        exclude: ".*(.fits|.fts|.fit|.txt|tca.*|.svg)$"
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.0.0
+    hooks:
+    -   id: flake8
+        args: ["--count", "--select=E9,F63,F7,F82", "--show-source", "--statistics"]

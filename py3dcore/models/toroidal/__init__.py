@@ -2,18 +2,18 @@
 
 import datetime
 import json
-import numba
-import numpy as np
 import os
+from itertools import product
+from typing import Union
+
+import numpy as np
+from heliosat.util import sanitize_dt
+from numba import guvectorize
+
 import py3dcore
 
 from ...model import SimulationBlackBox
-from heliosat.util import sanitize_dt
-from itertools import product
-from numba import guvectorize
-from typing import Union
-
-from .thin_torus import thin_torus_sq, thin_torus_qs, thin_torus_gh
+from .thin_torus import thin_torus_gh, thin_torus_qs, thin_torus_sq
 
 
 class ToroidalModel(SimulationBlackBox):
@@ -47,29 +47,52 @@ class ToroidalModel(SimulationBlackBox):
         2: rho_1        torus minor radius
         3: b_t          magnetic field strength at center
     """
+
     mag_model: str
     shape_model: str
 
-    def __init__(self, dt_0: Union[str, datetime.datetime], ensemble_size: int, iparams: dict = {}, shape_model: str = "thin_torus", mag_model: str = "gh", dtype: type = np.float32) -> None:
-        with open(os.path.join(os.path.dirname(py3dcore.__file__), "models/toroidal/parameters.json")) as fh:
+    def __init__(
+        self,
+        dt_0: Union[str, datetime.datetime],
+        ensemble_size: int,
+        iparams: dict = {},
+        shape_model: str = "thin_torus",
+        mag_model: str = "gh",
+        dtype: type = np.float32,
+    ) -> None:
+        with open(
+            os.path.join(
+                os.path.dirname(py3dcore.__file__), "models/toroidal/parameters.json"
+            )
+        ) as fh:
             iparams_dict = json.load(fh)
 
         for k, v in iparams.items():
             if k in iparams_dict:
                 iparams_dict[k].update(v)
             else:
-                raise KeyError("key \"%s\" not defined in parameters.json", k)
+                raise KeyError('key "%s" not defined in parameters.json', k)
 
-        super(ToroidalModel, self).__init__(dt_0, iparams=iparams_dict, sparams=4, ensemble_size=ensemble_size, dtype=dtype)
+        super(ToroidalModel, self).__init__(
+            dt_0,
+            iparams=iparams_dict,
+            sparams=4,
+            ensemble_size=ensemble_size,
+            dtype=dtype,
+        )
 
         self.mag_model = mag_model
         self.shape_model = shape_model
-    
+
     def propagator(self, dt_to: Union[str, datetime.datetime]) -> None:
-        _numba_propagator(self.dtype(sanitize_dt(dt_to).timestamp() - self.dt_0.timestamp()), self.iparams_arr, self.sparams_arr, self.sparams_arr)
+        _numba_propagator(
+            self.dtype(sanitize_dt(dt_to).timestamp() - self.dt_0.timestamp()),
+            self.iparams_arr,
+            self.sparams_arr,
+            self.sparams_arr,
+        )
 
         self.dt_t = dt_to
-
 
     def simulator_mag(self, pos: np.ndarray, out: np.ndarray) -> None:
         _q_tmp = np.zeros((len(self.iparams_arr), 3))
@@ -78,34 +101,50 @@ class ToroidalModel(SimulationBlackBox):
             thin_torus_sq(pos, self.iparams_arr, self.sparams_arr, self.qs_sx, _q_tmp)
 
             if self.mag_model == "gh":
-                thin_torus_gh(_q_tmp, self.iparams_arr, self.sparams_arr, self.qs_xs, out)
+                thin_torus_gh(
+                    _q_tmp, self.iparams_arr, self.sparams_arr, self.qs_xs, out
+                )
             else:
                 raise NotImplementedError
         else:
             raise NotImplementedError
 
-    def visualize_shape(self, iparam_index: int = 0, resolution: int = 10) -> np.ndarray:
+    def visualize_shape(
+        self, iparam_index: int = 0, resolution: int = 10
+    ) -> np.ndarray:
         r = np.array([1.0], dtype=self.dtype)
 
         c = 360 // resolution + 1
-        u = np.radians(np.r_[0:360 + resolution:resolution])
-        v = np.radians(np.r_[0:360 + resolution:resolution])
+        u = np.radians(np.r_[0 : 360 + resolution : resolution])
+        v = np.radians(np.r_[0 : 360 + resolution : resolution])
 
         # combination of wireframe points in (q)
-        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c ** 2, 3)
+        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c**2, 3)
         arr2 = np.zeros_like(arr)
 
         for i in range(0, len(arr)):
-            thin_torus_qs(arr[i], self.iparams_arr[iparam_index], self.sparams_arr[iparam_index],
-                          self.qs_xs[iparam_index], arr2[i])
+            thin_torus_qs(
+                arr[i],
+                self.iparams_arr[iparam_index],
+                self.sparams_arr[iparam_index],
+                self.qs_xs[iparam_index],
+                arr2[i],
+            )
 
         return arr2.reshape((c, c, 3))
 
-@guvectorize([
-    "void(float32, float32[:], float32[:], float32[:])",
-    "void(float64, float64[:], float64[:], float64[:])"],
-    '(), (j), (k) -> (k)', target="parallel")
-def _numba_propagator(t_offset: float, iparams: np.ndarray, _: np.ndarray, sparams: np.ndarray) -> None:
+
+@guvectorize(
+    [
+        "void(float32, float32[:], float32[:], float32[:])",
+        "void(float64, float64[:], float64[:], float64[:])",
+    ],
+    "(), (j), (k) -> (k)",
+    target="parallel",
+)
+def _numba_propagator(
+    t_offset: float, iparams: np.ndarray, _: np.ndarray, sparams: np.ndarray
+) -> None:
     (t_i, _, _, _, d, _, r, v, _, n_a, n_b, b_i, bg_d, bg_v) = iparams
 
     # rescale parameters
@@ -121,7 +160,7 @@ def _numba_propagator(t_offset: float, iparams: np.ndarray, _: np.ndarray, spara
 
     vt = dv / (1 + bg_sgn * bg_d * dv * dt) + bg_v
 
-    rho_1 = d * (rt ** n_a) / 2
+    rho_1 = d * (rt**n_a) / 2
     rho_0 = (rt - rho_1) / 2
     b_t = b_i * (2 * rho_0) ** (-n_b)
 
