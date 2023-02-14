@@ -24,7 +24,7 @@ def generate_quaternions(
     else:
         indices = np.array(indices)
 
-    (i1, i2, i3) = (indices[0], indices[1], indices[2])  # type: ignore
+    (i1, i2, i3) = (indices[0], indices[1], indices[2])
     (lon, lat, inc) = (arr[:, i1], arr[:, i2], arr[:, i3])
 
     # generate standard axes vectors

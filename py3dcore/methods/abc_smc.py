@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 
+"""abc_smc.py
+
+Implements an ABC-SMC algorithm.
+"""
+
 import datetime
 import faulthandler
 import logging
@@ -14,16 +19,11 @@ import numpy as np
 from heliosat.util import sanitize_dt
 
 from ..model import SimulationBlackBox, set_random_seed
-from .base import BaseFitter, FittingData
-
-faulthandler.enable()
-
-
-def starmap(func, args):
-    return [func(*_) for _ in args]
+from .data import FittingData
+from .method import BaseMethod
 
 
-class ABC_SMC(BaseFitter):
+class ABC_SMC(BaseMethod):
     iter_i: int
 
     hist_eps: list
@@ -93,7 +93,7 @@ class ABC_SMC(BaseFitter):
 
                     logger.info("initial eps_init = %s", self.hist_eps[-1])
 
-                    model_obj_kwargs = dict(self.model_kwargs)  # type: ignore
+                    model_obj_kwargs = dict(self.model_kwargs)  #
                     model_obj_kwargs["ensemble_size"] = ensemble_size
                     model_obj = self.model(self.dt_0, **model_obj_kwargs)
 
@@ -120,7 +120,8 @@ class ABC_SMC(BaseFitter):
                     abc_smc_worker,
                     [(*worker_args, _random_seed + i) for i in range(jobs)],
                 )
-                total_runs = jobs * int(self.model_kwargs["ensemble_size"])  # type: ignore
+                logger.info("first run completed")
+                total_runs = jobs * int(self.model_kwargs["ensemble_size"])  #
 
                 # repeat until enough samples are collected
                 while True:
@@ -164,7 +165,7 @@ class ABC_SMC(BaseFitter):
                     _results.extend(_results_ext)
 
                     sub_iter_i += 1
-                    total_runs += jobs * int(self.model_kwargs["ensemble_size"])  # type: ignore
+                    total_runs += jobs * int(self.model_kwargs["ensemble_size"])  #
 
                     if pcount == 0:
                         logger.warning("no hits, aborting")
@@ -204,8 +205,8 @@ class ABC_SMC(BaseFitter):
                 elif isinstance(eps_quantile, list) or isinstance(
                     eps_quantile, np.ndarray
                 ):
-                    eps_quantile_eff = eps_quantile ** (1 / self.hist_eps_dim)  # type: ignore
-                    _k = len(eps_quantile_eff)  # type: ignore
+                    eps_quantile_eff = eps_quantile ** (1 / self.hist_eps_dim)  #
+                    _k = len(eps_quantile_eff)  #
 
                     new_eps = np.array(
                         [
@@ -214,7 +215,7 @@ class ABC_SMC(BaseFitter):
                         ]
                     )
 
-                    self.hist_eps.append(new_eps)  # type: ignore
+                    self.hist_eps.append(new_eps)  #
 
                 logger.info(
                     "setting new eps: %s => %s", self.hist_eps[-2], self.hist_eps[-1]
@@ -266,6 +267,7 @@ def abc_smc_worker(*args: Any) -> Tuple[np.ndarray, np.ndarray]:
         kernel_mode,
         random_seed,
     ) = args
+    logger = logging.getLogger(__name__)
 
     if iter_i == 0:
         model_obj = model_class(dt_0, **model_kwargs)

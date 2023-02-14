@@ -50,7 +50,7 @@
         "index": 5,
         "name": "aspect ratio",
         "distribution": "uniform",
-        "maximum": 12,
+        "maximum": 6,
         "minimum": 1,
         "boundary": "continuous",
         "label": "\\delta"

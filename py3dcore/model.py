@@ -8,11 +8,8 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numba
 import numpy as np
-import scipy as sp
 from heliosat.util import sanitize_dt
-from matplotlib.pyplot import pie
 from numba import guvectorize
-from scipy.signal import detrend, welch
 
 from .rotqs import generate_quaternions
 
@@ -51,7 +48,7 @@ class SimulationBlackBox(object):
         dtype: type,
     ) -> None:
         self.dt_0 = sanitize_dt(dt_0)
-        self.dt_t = self.dt_0
+        self.dt_t = None
 
         self.iparams = iparams
         self.sparams = sparams
@@ -75,9 +72,7 @@ class SimulationBlackBox(object):
             )
         else:
             raise TypeError(
-                "sparams must be of type int or tuple, not {0!s}".format(
-                    type(self.sparams)
-                )
+                "sparams must be of type int or tuple, not %s", type(self.sparams)
             )
 
         self.qs_sx = np.empty((self.ensemble_size, 4), dtype=self.dtype)
@@ -86,7 +81,7 @@ class SimulationBlackBox(object):
         self.iparams_meta = np.empty((len(self.iparams), 7), dtype=self.dtype)
         self.update_iparams_meta()
 
-    def generator(self, random_seed: int = 42) -> None:
+    def generator(self, random_seed: int = 42, max_iterations: int = 100) -> None:
         set_random_seed(random_seed)
 
         for k, iparam in self.iparams.items():
@@ -97,18 +92,19 @@ class SimulationBlackBox(object):
                 func: Callable, max_v: float, min_v: float, size: int, **kwargs: Any
             ) -> np.ndarray:
                 numbers = func(size=size, **kwargs)
-                for _ in range(100):
+                for _ in range(max_iterations):
                     flt = (numbers > max_v) | (numbers < min_v)
                     if np.sum(flt) == 0:
                         return numbers
                     numbers[flt] = func(size=len(flt), **kwargs)[flt]
                 raise RuntimeError(
-                    "drawing numbers inefficiently (%i/%i after 100 iterations)",
+                    "drawing numbers inefficiently (%i/%i after %i iterations)",
                     len(flt),
                     size,
+                    max_iterations,
                 )
 
-            # generate values according to given distribution
+            # generate values according to the given distribution
             if dist in ["fixed", "fixed_value"]:
                 self.iparams_arr[:, ii] = iparam["default_value"]
             elif dist in ["constant", "uniform"]:
@@ -128,12 +124,10 @@ class SimulationBlackBox(object):
                 )
             else:
                 raise NotImplementedError(
-                    'parameter distribution "{0!s}" is not implemented'.format(dist)
+                    'parameter distribution "%s" is not implemented', dist
                 )
 
         generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
-
-        self.dt_t = self.dt_0
 
     def propagator(self, dt_to: Union[str, datetime.datetime]) -> None:
         raise NotImplementedError
@@ -145,18 +139,23 @@ class SimulationBlackBox(object):
         sparams: Optional[Sequence[int]] = None,
     ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         if isinstance(dt, datetime.datetime) or isinstance(dt, str):
-            dt = [dt]  # type: ignore
+            dt = [dt]
             pos = [pos]
         elif (len(dt) > 1 and len(pos) == 1) or np.array(pos).ndim == 1:
             pos = [np.array(pos, dtype=self.dtype) for _ in range(len(dt))]
 
-        b_out = [np.empty((self.ensemble_size, 3), dtype=self.dtype) for _ in range(len(dt))]  # type: ignore
+        b_out = [
+            np.empty((self.ensemble_size, 3), dtype=self.dtype) for _ in range(len(dt))
+        ]
 
         if sparams and len(sparams) > 0:
-            s_out = [np.empty((self.ensemble_size, len(sparams)), dtype=self.dtype) for _ in range(len(dt))]  # type: ignore
+            s_out = [
+                np.empty((self.ensemble_size, len(sparams)), dtype=self.dtype)
+                for _ in range(len(dt))
+            ]
 
-        for i in range(len(dt)):  # type: ignore
-            self.propagator(dt[i])  # type: ignore
+        for i in range(len(dt)):
+            self.propagator(dt[i])
             self.simulator_mag(pos[i], b_out[i])
 
             if sparams and len(sparams) > 0:
@@ -189,15 +188,11 @@ class SimulationBlackBox(object):
 
         generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
 
-        self.dt_t = self.dt_0
-
     def update_kernels(self, kernel_mode: str = "cm") -> None:
         if kernel_mode == "cm":
             self.iparams_kernel = 2 * np.cov(self.iparams_arr, rowvar=False)
-
-            # due to aweights sometimes very small numbers are generated
-            # self.iparams_kernel[np.where(self.iparams_kernel < 1e-12)] = 0
         elif kernel_mode == "lcm":
+            # TODO: implement local cm method
             raise NotImplementedError
         else:
             raise NotImplementedError
@@ -222,6 +217,8 @@ class SimulationBlackBox(object):
         else:
             raise NotImplementedError
 
+        # TODO: INCLUDE PRIORS (CURRENTL ASSUMES UNIFORM)
+
         self.iparams_weight /= np.sum(self.iparams_weight)
 
     def perturb_iparams(
@@ -241,13 +238,12 @@ class SimulationBlackBox(object):
                 self.iparams_meta,
             )
         elif kernel_mode == "lcm":
+            # TODO: implement local cm method
             raise NotImplementedError
         else:
             raise ValueError("iparams kernel(s) must be 2 or 3 dimensional")
 
         generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
-
-        self.dt_t = self.dt_0
 
     def update_iparams_meta(self) -> None:
         for k, iparam in self.iparams.items():
@@ -261,6 +257,14 @@ class SimulationBlackBox(object):
                 raise ValueError("invalid parameter range selected")
 
             if dist in ["fixed", "fixed_value"]:
+                if (
+                    iparam["maximum"] < iparam["default_value"]
+                    or iparam["default_value"] < iparam["minimum"]
+                ):
+                    raise ValueError(
+                        "invalid parameter range selected, default_value out of range when using fixed distribution"
+                    )
+
                 self.iparams_meta[ii, 1] = 0
                 self.iparams_meta[ii, 3] = iparam["maximum"]
                 self.iparams_meta[ii, 4] = iparam["minimum"]
@@ -318,7 +322,6 @@ def _numba_perturb_kernel_cm(
     meta: np.ndarray,
 ) -> None:
     isel = _numba_perturb_select_weights(len(iparams_new), weights_old)
-    # print("perturb start")
     for i in range(len(iparams_new)):
         si = isel[i]
 
@@ -345,11 +348,9 @@ def _numba_perturb_kernel_cm(
                             candidate[pi] += meta[pi, 3] - meta[pi, 4]
                     else:
                         acc = False
-                        # print("MISS")
                         break
 
             if acc:
-                # print("HIT")
                 break
 
             c += 1
@@ -360,7 +361,6 @@ def _numba_perturb_kernel_cm(
                 offset = np.dot(kernel_lower, np.random.randn(len(meta), Nc))
 
         iparams_new[i] = candidate
-    # print("perturb end")
 
 
 @numba.njit(fastmath=True)
@@ -424,33 +424,3 @@ def set_random_seed(seed: int) -> None:
 @numba.njit
 def _numba_set_random_seed(seed: int) -> None:
     np.random.seed(seed)
-
-
-def mag_fft(
-    dt: Sequence[datetime.datetime], bdt: np.ndarray, sampling_freq: int
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Computes the mean power spectrum distribution from a magnetic field measurements over all three vector components.
-    Note: Assumes that P(k) is the same for all three vector components.
-    """
-    n_s = int(((dt[-1] - dt[0]).total_seconds() / 3600) - 1)
-    n_perseg = np.min([len(bdt), 256])
-
-    p_bX = detrend(bdt[:, 0], type="linear", bp=n_s)
-    p_bY = detrend(bdt[:, 1], type="linear", bp=n_s)
-    p_bZ = detrend(bdt[:, 2], type="linear", bp=n_s)
-
-    _, wX = welch(p_bX, fs=1 / sampling_freq, nperseg=n_perseg)
-    _, wY = welch(p_bY, fs=1 / sampling_freq, nperseg=n_perseg)
-    wF, wZ = welch(p_bZ, fs=1 / sampling_freq, nperseg=n_perseg)
-
-    wS = (wX + wY + wZ) / 3
-
-    # convert P(k) into suitable form for fft
-    fF = np.fft.fftfreq(len(p_bX), d=sampling_freq)
-    fS = np.zeros((len(fF)))
-
-    for i in range(len(fF)):
-        k = np.abs(fF[i])
-        fS[i] = np.sqrt(wS[np.argmin(np.abs(k - wF))])
-
-    return fF, fS

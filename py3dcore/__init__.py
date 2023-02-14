@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from .fitter import ABC_SMC
-from .models import ToroidalModel
 
 __author__ = "Andreas J. Weiss"
 __copyright__ = "Copyright (C) 2019 Andreas J. Weiss"
