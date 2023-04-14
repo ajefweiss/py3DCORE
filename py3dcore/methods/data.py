@@ -6,7 +6,6 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 import heliosat
 import numba
 import numpy as np
-from heliosat.routines import power_spectral_density
 from scipy.signal import detrend, welch
 
 
