@@ -57,6 +57,7 @@ class FittingData(object):
                         )
                         / sampling_fac
                     ).T
+
                     profiles[1 + _offset : _offset + (dtl + 2) - 1, :, c][
                         null_flt
                     ] += noise[dt][null_flt]
@@ -75,7 +76,9 @@ class FittingData(object):
                 # generate noise for each component
                 for c in range(3):
                     noise = (
-                        np.random.normal(0, 1, size=(ensemble_size, dtl))
+                        np.random.normal(
+                            0, self.gauss_noise_level[o], size=(ensemble_size, dtl)
+                        )
                         .astype(np.float32)
                         .T
                     )
@@ -97,7 +100,11 @@ class FittingData(object):
         self.psd_fft = []
         self.sampling_freq = sampling_freq
 
+        self.gauss_noise_level = []
+
         self.noise_model = noise_model
+
+        print("using noise model", noise_model)
 
         if noise_model == "psd":
             for o in range(self.length):
@@ -127,7 +134,24 @@ class FittingData(object):
                 self.psd_dt.append(fT)
                 self.psd_fft.append(fS)
         elif noise_model == "gaussian":
-            pass
+            for o in range(self.length):
+                observer, dt, dt_s, dt_e, _ = self.observers[o]
+
+                observer_obj = getattr(heliosat, observer)()
+
+                _, data = observer_obj.get(
+                    [dt_s, dt_e],
+                    "mag",
+                    reference_frame=self.reference_frame,
+                    sampling_freq=sampling_freq,
+                    cached=True,
+                    as_endpoints=True,
+                )
+
+                data[np.isnan(data)] = 0
+
+                # TODO: remove hard coding
+                self.gauss_noise_level.append(2)
         else:
             raise NotImplementedError
 

@@ -188,7 +188,10 @@ def thin_torus_gh(
 
         denom = 1 + t**2 * q0**2
         bpsi = b_t / denom * fluxfactor
-        bphi = b_t * t * q0 / denom / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
+
+        bphi = (
+            (b_t * t * q0 / denom) / (1 + q0 * rho_1 / rho_0 * np.cos(q2)) * fluxfactor
+        )
 
         # magnetic field in (x)
         bsnp[0] = dr[0] * br + dpsi[0] * bpsi + dphi[0] * bphi

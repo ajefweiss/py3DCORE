@@ -131,5 +131,55 @@
         "minimum": 250,
         "boundary": "continuous",
         "label": "v_{sw}"
+    },
+    "alpha": {
+        "index": 14,
+        "name": "width scale parameter",
+        "distribution": "uniform",
+        "default_value": 0,
+        "maximum": 0.75,
+        "minimum": -0.25,
+        "boundary": "continuous",
+        "label": "\\alpha"
+    },
+    "beta": {
+        "index": 15,
+        "name": "beta scale height parameter",
+        "distribution": "uniform",
+        "default_value": 0,
+        "maximum": 0.225,
+        "minimum": -0.225,
+        "boundary": "continuous",
+        "label": "\\beta"
+    },
+    "lambda": {
+        "index": 16,
+        "name": "side width parameter",
+        "distribution": "uniform",
+        "default_value": 1,
+        "maximum": 2,
+        "minimum": 0.25,
+        "boundary": "continuous",
+        "label": "\\alpha"
+    },
+    "epsilon": {
+        "index": 17,
+        "name": "wave parameter",
+        "distribution": "uniform",
+        "default_value": 0,
+        "maximum": 2,
+        "minimum": -2,
+        "boundary": "continuous",
+        "label": "\\alpha"
+    },
+    "kappa": {
+        "index": 18,
+        "name": "kappa front parameter",
+        "distribution": "fixed",
+        "default_value": 2,
+        "maximum": 2,
+        "minimum": 0,
+        "boundary": "continuous",
+        "label": "\\alpha"
     }
 }

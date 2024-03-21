@@ -136,9 +136,9 @@ class ABC_SMC(BaseMethod):
                     epses_temp = np.zeros((pcount, self.hist_eps_dim), model_obj.dtype)
 
                     for i in range(0, len(_results)):
-                        particles_temp[
-                            sum(pcounts[:i]) : sum(pcounts[: i + 1])
-                        ] = _results[i][0]
+                        particles_temp[sum(pcounts[:i]) : sum(pcounts[: i + 1])] = (
+                            _results[i][0]
+                        )
                         epses_temp[sum(pcounts[:i]) : sum(pcounts[: i + 1])] = _results[
                             i
                         ][1]
