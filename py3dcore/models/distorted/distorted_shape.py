@@ -122,7 +122,7 @@ def distorted_rhofield(
     # curvature
     K = 1 - Df_ev * (k1 * cosDOm + k2 * sinDOm)
 
-    # metric (without D)
+    # metric
     goDf = Df_ev * K * (Dfdmu_ev * DOmdnu_ev - Dfdnu_ev * DOmdmu_ev)
 
     denom = 1 + t**2 * mu_i**2
@@ -144,7 +144,7 @@ def distorted_rhofield(
 
     bv = b_nu * eps_nu + b_s * eps_s
 
-    return goDf * np.dot(bv, bv)
+    return np.dot(bv, bv)
 
 
 @numba.njit(cache=True)
@@ -764,7 +764,7 @@ def distorted_sq_rho(
 
     s_h2 = 5 * s_h
 
-    for i in range(20):
+    for i in range(50):
         df_si = np.linalg.norm(
             rho_0 * gamma(s_i, alpha, beta, lambda_v, epsilon, kappa) - xs
         )
@@ -837,7 +837,7 @@ def distorted_sq_rho(
     # first we need good initial estimates, assuming DOm is linear
     # note that this all works very badly if mu_i << 1
     # TODO: improve algorithm for small mu
-    Np = 4
+    Np = 9
     mnu_i_0 = np.empty((Np, 2))
 
     for i in range(Np):
@@ -862,7 +862,7 @@ def distorted_sq_rho(
         last_corr = 1
         sfac = 1
 
-        for i in range(8):
+        for i in range(20):
             mu_i = mnu_i[0]
             nu_i = mnu_i[1]
 
@@ -947,12 +947,12 @@ def distorted_sq_rho(
         nu_i += 1
 
     # compute b within s coordinates
-    if mu_i < 1.3 and err < 1e-7:
+    if mu_i < 1 and err < 1e-7:
 
         # correct twist by flux rope length
         twist = Tfac / gamma_l
 
-        rho[0] = distorted_rhofield(
+        rho[0] = (1 - np.sqrt(np.sqrt((np.abs(s_i - 0.5))))) * distorted_rhofield(
             mu_i, nu_i, s_i, rho_0, rho_1, tv, n1, n2, k1, k2, delta, twist
         )
 

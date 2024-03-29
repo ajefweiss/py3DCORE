@@ -181,10 +181,10 @@ def thin_torus_gh(
         fluxfactor = 1 / np.sin(q1 / 2) ** 2
 
         # ellipse circumference
-        h = (delta - 1) ** 2 / (1 + delta) ** 2
-        Efac = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
+        # h = (delta - 1) ** 2 / (1 + delta) ** 2
+        # Efac = np.pi * (1 + delta) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
 
-        t = Tfac * rho_1 / rho_0 / 2 / np.pi * np.sin(q1 / 2) ** 2 / Efac
+        t = Tfac * rho_1 / rho_0 / 2 / np.pi * np.sin(q1 / 2) ** 2
 
         denom = 1 + t**2 * q0**2
         bpsi = b_t / denom * fluxfactor
