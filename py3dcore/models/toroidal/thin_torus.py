@@ -21,7 +21,7 @@ def thin_torus_qs(
     q: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_xs: np.ndarray,
+    q_qs: np.ndarray,
     s: np.ndarray,
 ) -> None:
     (q0, q1, q2) = q
@@ -40,7 +40,7 @@ def thin_torus_qs(
         ]
     )
 
-    s[:] = _numba_quaternion_rotate(x, q_xs)
+    s[:] = _numba_quaternion_rotate(x, q_qs)
 
 
 @guvectorize(
@@ -55,7 +55,7 @@ def thin_torus_sq(
     s: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_sx: np.ndarray,
+    q_sq: np.ndarray,
     q: np.ndarray,
 ) -> None:
     delta = iparams[5]
@@ -64,7 +64,7 @@ def thin_torus_sq(
 
     _s = np.array([0, s[0], s[1], s[2]]).astype(s.dtype)
 
-    xs = _numba_quaternion_rotate(_s, q_sx)
+    xs = _numba_quaternion_rotate(_s, q_sq)
 
     (x0, x1, x2) = xs
 
@@ -155,12 +155,14 @@ def thin_torus_gh(
     q: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_xs: np.ndarray,
+    q_qs: np.ndarray,
     b: np.ndarray,
 ) -> None:
     bsnp = np.empty((3,))
 
     (q0, q1, q2) = (q[0], q[1], q[2])
+
+    phi_cut = 0.1
 
     if q0 <= 1:
         (t_i, _, _, _, _, delta, _, _, Tfac, _, _, _, _, _) = iparams
@@ -199,7 +201,7 @@ def thin_torus_gh(
         bsnp[2] = dr[2] * br + dpsi[2] * bpsi + dphi[2] * bphi
 
         # magnetic field in (s)
-        bss = _numba_quaternion_rotate(np.array([0, bsnp[0], bsnp[1], bsnp[2]]), q_xs)
+        bss = _numba_quaternion_rotate(np.array([0, bsnp[0], bsnp[1], bsnp[2]]), q_qs)
 
         b[0] = bss[0]
         b[1] = bss[1]

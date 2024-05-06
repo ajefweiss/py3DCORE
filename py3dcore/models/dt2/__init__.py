@@ -14,11 +14,11 @@ from scipy.optimize import least_squares
 import py3dcore
 
 from ...model import SimulationBlackBox
-from .thin_torus import thin_torus_gh, thin_torus_qs, thin_torus_sq
+from .distorted_shape import dgds, distorted_qs, distorted_sq, distorted_sq_gh
 
 
-class ToroidalModel(SimulationBlackBox):
-    """Implements the torus model.
+class DT2Model(SimulationBlackBox):
+    """Implements the distorted model (with fri3d global shape).
 
     Model Parameters
     ================
@@ -42,11 +42,20 @@ class ToroidalModel(SimulationBlackBox):
         12: bg_d        solar wind background drag coefficient
         13: bg_v        solar wind background speed
 
-        There are 4 state parameters which are as follows:
+        14: n
+        15: beta
+        16: lambda
+        17: epsilon
+        18: kappa
+        19: phihw       half width angle
+
+        There are 5 state parameters which are as follows:
         0: v_t          current velocity
         1: rho_0        torus major radius
         2: rho_1        torus minor radius
         3: b_t          magnetic field strength at center
+        4: gamma_l      axis length
+        5: vel_05       curve velocity at s=0.5
     """
 
     mag_model: str
@@ -57,13 +66,13 @@ class ToroidalModel(SimulationBlackBox):
         dt_0: Union[str, datetime.datetime],
         ensemble_size: int,
         iparams: dict = {},
-        shape_model: str = "thin_torus",
+        shape_model: str = "distorted",
         mag_model: str = "gh",
         dtype: type = np.float32,
     ) -> None:
         with open(
             os.path.join(
-                os.path.dirname(py3dcore.__file__), "models/toroidal/parameters.json"
+                os.path.dirname(py3dcore.__file__), "models/dt2/parameters.json"
             )
         ) as fh:
             iparams_dict = json.load(fh)
@@ -74,10 +83,10 @@ class ToroidalModel(SimulationBlackBox):
             else:
                 raise KeyError('key "%s" not defined in parameters.json', k)
 
-        super(ToroidalModel, self).__init__(
+        super(DT2Model, self).__init__(
             dt_0,
             iparams=iparams_dict,
-            sparams=4,
+            sparams=6,
             ensemble_size=ensemble_size,
             dtype=dtype,
         )
@@ -96,35 +105,27 @@ class ToroidalModel(SimulationBlackBox):
         self.dt_t = dt_to
 
     def simulator_mag(self, pos: np.ndarray, out: np.ndarray) -> None:
-        _q_tmp = np.zeros((len(self.iparams_arr), 3))
-
-        if self.shape_model == "thin_torus":
-            thin_torus_sq(pos, self.iparams_arr, self.sparams_arr, self.qs_sq, _q_tmp)
-
-            if self.mag_model == "gh":
-                thin_torus_gh(
-                    _q_tmp, self.iparams_arr, self.sparams_arr, self.qs_qs, out
-                )
-            else:
-                raise NotImplementedError
+        if self.shape_model == "distorted":
+            distorted_sq_gh(
+                pos, self.iparams_arr, self.sparams_arr, self.qs_sq, self.qs_qs, out
+            )
         else:
             raise NotImplementedError
 
     def visualize_shape(
-        self, iparam_index: int = 0, resolution: int = 10
+        self, iparam_index: int = 0, resolution: int = 20
     ) -> np.ndarray:
         r = np.array([1.0], dtype=self.dtype)
-
-        c = 360 // resolution + 1
-        u = np.radians(np.r_[0 : 360 + resolution : resolution])
-        v = np.radians(np.r_[0 : 360 + resolution : resolution])
-
+        u = np.linspace(0, 1, resolution)
+        v = np.linspace(0, 1, resolution)
+        c1 = len(u)
+        c2 = len(v)
         # combination of wireframe points in (q)
-        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c**2, 3)
+        arr = np.array(list(product(r, u, v)), dtype=self.dtype).reshape(c1 * c2, 3)
         arr2 = np.zeros_like(arr)
 
         for i in range(0, len(arr)):
-            thin_torus_qs(
+            distorted_qs(
                 arr[i],
                 self.iparams_arr[iparam_index],
                 self.sparams_arr[iparam_index],
@@ -132,10 +133,17 @@ class ToroidalModel(SimulationBlackBox):
                 arr2[i],
             )
 
-        return arr2.reshape((c, c, 3))
+        return arr2.reshape((c1, c2, 3))
 
     def visualize_fieldline(
-        self, q0, index=0, steps=1000, step_size=0.01, return_phi=False
+        self,
+        q0: np.ndarray,
+        index: int = 0,
+        steps: int = 1000,
+        step_size: float = 0.01,
+        return_phi: bool = False,
+        s_max: float = 1,
+        s_min: float = 0,
     ):
         """Integrates along the magnetic field lines starting at a point q0 in (q) coordinates and
         returns the field lines in (s) coordinates.
@@ -159,8 +167,9 @@ class ToroidalModel(SimulationBlackBox):
 
         _tva = np.empty((3,), dtype=self.dtype)
         _tvb = np.empty((3,), dtype=self.dtype)
+        _tvc = np.empty((3,), dtype=self.dtype)
 
-        thin_torus_qs(
+        distorted_qs(
             q0,
             self.iparams_arr[index],
             self.sparams_arr[index],
@@ -168,57 +177,85 @@ class ToroidalModel(SimulationBlackBox):
             _tva,
         )
 
-        fl = [np.array(_tva, dtype=self.dtype)]
-        qc = [q0[2]]
+        r0 = q0[0]
 
-        def iterate(s):
-            thin_torus_sq(
+        fl = [np.array(_tva, dtype=self.dtype)]
+        rc = [q0[0]]
+        qc = [q0[1]]
+        sc = [q0[2]]
+
+        def iterate(s: float) -> float:
+            distorted_sq_gh(
                 s,
                 self.iparams_arr[index],
                 self.sparams_arr[index],
                 self.qs_sq[index],
-                _tva,
-            )
-            thin_torus_gh(
-                _tva,
-                self.iparams_arr[index],
-                self.sparams_arr[index],
                 self.qs_qs[index],
-                _tvb,
+                _tva,
             )
 
-            return _tvb / np.linalg.norm(_tvb)
+            return _tva / np.linalg.norm(_tva)
 
         while len(fl) < steps:
-            # use implicit method and least squares for calculating the next step
+
             try:
-                sol = getattr(
-                    least_squares(
-                        lambda x: x
-                        - fl[-1]
-                        - step_size * iterate((x.astype(self.dtype) + fl[-1]) / 2),
-                        fl[-1],
-                    ),
-                    "x",
-                )
-                fl.append(np.array(sol.astype(self.dtype)))
-                thin_torus_sq(
-                    fl[-1],
+                # use implicit method and least squares for calculating the next step
+                # sol = getattr(
+                #     least_squares(
+                #         lambda x: x
+                #         - fl[-1]
+                #         - step_size * iterate((x.astype(self.dtype) + fl[-1]) / 2),
+                #         fl[-1],
+                #     ),
+                #     "x",
+                # )
+
+                # rk4
+
+                k1 = iterate(fl[-1])
+                k2 = iterate(fl[-1] + step_size * k1 / 2)
+                k3 = iterate(fl[-1] + step_size * k2 / 2)
+                k4 = iterate(fl[-1] + step_size * k3)
+
+                sol = fl[-1] + step_size / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+                # remap to same q
+                distorted_sq(
+                    sol,
                     self.iparams_arr[index],
                     self.sparams_arr[index],
                     self.qs_sq[index],
-                    _tva,
+                    _tvb,
                 )
-                qc.append(_tva[-1])
+
+                _tvb[0] = r0
+
+                distorted_qs(
+                    _tvb,
+                    self.iparams_arr[index],
+                    self.sparams_arr[index],
+                    self.qs_qs[index],
+                    _tvc,
+                )
+
+                fl.append(np.array(_tvc.astype(self.dtype)))
+
+                if _tvb[2] > s_max or _tvb[2] < s_min:
+                    break
+                rc.append(_tvb[0])
+                qc.append(_tvb[1])
+                sc.append(_tvb[2])
             except Exception as e:
                 print(e)
                 break
 
         fl = np.array(fl, dtype=self.dtype)
         qc = np.array(qc, dtype=self.dtype)
+        sc = np.array(sc, dtype=self.dtype)
+        rc = np.array(rc, dtype=self.dtype)
 
         if return_phi:
-            return fl, qc
+            return fl, qc, sc, rc
         else:
             return fl
 
@@ -234,7 +271,30 @@ class ToroidalModel(SimulationBlackBox):
 def _numba_propagator(
     t_offset: float, iparams: np.ndarray, _: np.ndarray, sparams: np.ndarray
 ) -> None:
-    (t_i, _, _, _, d, _, r, v, _, n_a, n_b, b_i, bg_d, bg_v) = iparams
+    (
+        t_i,
+        _,
+        _,
+        _,
+        d,
+        _,
+        r,
+        v,
+        _,
+        n_a,
+        n_b,
+        b_i,
+        bg_d,
+        bg_v,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+        phihw,
+        _,
+        _,
+    ) = iparams
 
     # rescale parameters
     bg_d = bg_d * 1e-7
@@ -253,7 +313,47 @@ def _numba_propagator(
     rho_0 = (rt - rho_1) / 2
     b_t = b_i * (2 * rho_0) ** (-n_b)
 
+    # compute flux rope length, rough estimate based on 20 points
+    s_r = [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+    ]
+
+    gamma_l = 0
+
+    for s_v in s_r:
+        dv = rho_0 * np.linalg.norm(
+            (dgds(s_v, phihw, alpha, beta, lambda_v, epsilon, kappa))
+        )
+
+        if not np.isnan(dv):
+            gamma_l += dv
+
+        if s_v == 0.5:
+            vel05 = dv
+
+    gamma_l /= len(s_r)
+
     sparams[0] = vt
     sparams[1] = rho_0
     sparams[2] = rho_1
     sparams[3] = b_t
+    sparams[4] = gamma_l
+    sparams[5] = vel05

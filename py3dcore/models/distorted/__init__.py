@@ -104,7 +104,7 @@ class DistortedModel(SimulationBlackBox):
     def simulator_mag(self, pos: np.ndarray, out: np.ndarray) -> None:
         if self.shape_model == "distorted":
             distorted_sq_gh(
-                pos, self.iparams_arr, self.sparams_arr, self.qs_sx, self.qs_xs, out
+                pos, self.iparams_arr, self.sparams_arr, self.qs_sq, self.qs_qs, out
             )
         else:
             raise NotImplementedError
@@ -125,7 +125,7 @@ class DistortedModel(SimulationBlackBox):
                 arr[i],
                 self.iparams_arr[iparam_index],
                 self.sparams_arr[iparam_index],
-                self.qs_xs[iparam_index],
+                self.qs_qs[iparam_index],
                 arr2[i],
             )
 

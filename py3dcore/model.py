@@ -36,8 +36,8 @@ class SimulationBlackBox(object):
 
     dtype: type
 
-    qs_sx: np.ndarray
-    qs_xs: np.ndarray
+    qs_sq: np.ndarray
+    qs_qs: np.ndarray
 
     def __init__(
         self,
@@ -75,8 +75,8 @@ class SimulationBlackBox(object):
                 "sparams must be of type int or tuple, not %s", type(self.sparams)
             )
 
-        self.qs_sx = np.empty((self.ensemble_size, 4), dtype=self.dtype)
-        self.qs_xs = np.empty((self.ensemble_size, 4), dtype=self.dtype)
+        self.qs_sq = np.empty((self.ensemble_size, 4), dtype=self.dtype)
+        self.qs_qs = np.empty((self.ensemble_size, 4), dtype=self.dtype)
 
         self.iparams_meta = np.empty((len(self.iparams), 7), dtype=self.dtype)
         self.update_iparams_meta()
@@ -127,7 +127,7 @@ class SimulationBlackBox(object):
                     'parameter distribution "%s" is not implemented', dist
                 )
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
+        generate_quaternions(self.iparams_arr, self.qs_sq, self.qs_qs)
 
     def overwrite(self, iparams_arr: np.ndarray) -> None:
         if self.iparams_arr.shape != iparams_arr.shape:
@@ -135,7 +135,7 @@ class SimulationBlackBox(object):
 
         self.iparams_arr = iparams_arr
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
+        generate_quaternions(self.iparams_arr, self.qs_sq, self.qs_qs)
 
     def propagator(self, dt_to: Union[str, datetime.datetime]) -> None:
         raise NotImplementedError
@@ -194,7 +194,7 @@ class SimulationBlackBox(object):
         else:
             self.iparams_arr = iparams_arr.astype(self.dtype)
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
+        generate_quaternions(self.iparams_arr, self.qs_sq, self.qs_qs)
 
     def update_kernels(self, kernel_mode: str = "cm") -> None:
         if kernel_mode == "cm":
@@ -251,7 +251,7 @@ class SimulationBlackBox(object):
         else:
             raise ValueError("iparams kernel(s) must be 2 or 3 dimensional")
 
-        generate_quaternions(self.iparams_arr, self.qs_sx, self.qs_xs)
+        generate_quaternions(self.iparams_arr, self.qs_sq, self.qs_qs)
 
     def update_iparams_meta(self) -> None:
         for k, iparam in self.iparams.items():

@@ -85,9 +85,12 @@ class ABC_SMC(BaseMethod):
                 data_obj.generate_data(_time_offset, **data_kwargs)
 
                 if len(self.hist_eps) == 0:
-                    eps_init = data_obj.sumstat(
-                        [np.zeros((1, 3))] * len(data_obj.data_b), use_mask=False
-                    )[0]
+                    if "eps_init" in kwargs:
+                        eps_init = kwargs.get("eps_init")
+                    else:
+                        eps_init = data_obj.sumstat(
+                            [np.zeros((1, 3))] * len(data_obj.data_b), use_mask=False
+                        )[0]
                     self.hist_eps = [eps_init, eps_init * 0.98]
                     self.hist_eps_dim = len(eps_init)
 
@@ -134,6 +137,9 @@ class ABC_SMC(BaseMethod):
                         (pcount, model_obj.iparams_arr.shape[1]), model_obj.dtype
                     )
                     epses_temp = np.zeros((pcount, self.hist_eps_dim), model_obj.dtype)
+                    epses_temp_nn = np.zeros(
+                        (pcount, self.hist_eps_dim), model_obj.dtype
+                    )
 
                     for i in range(0, len(_results)):
                         particles_temp[sum(pcounts[:i]) : sum(pcounts[: i + 1])] = (
@@ -142,6 +148,9 @@ class ABC_SMC(BaseMethod):
                         epses_temp[sum(pcounts[:i]) : sum(pcounts[: i + 1])] = _results[
                             i
                         ][1]
+                        epses_temp_nn[sum(pcounts[:i]) : sum(pcounts[: i + 1])] = (
+                            _results[i][2]
+                        )
 
                     logger.info(
                         "step %i:%i with (%i/%i) particles",
@@ -167,8 +176,8 @@ class ABC_SMC(BaseMethod):
                     sub_iter_i += 1
                     total_runs += jobs * int(self.model_kwargs["ensemble_size"])  #
 
-                    if pcount == 0:
-                        logger.warning("no hits, aborting")
+                    if pcount < ensemble_size / 12:
+                        logger.warning("not enough hits, aborting")
                         kill_flag = True
                         break
 
@@ -177,6 +186,8 @@ class ABC_SMC(BaseMethod):
 
                 if pcount > ensemble_size:
                     particles_temp = particles_temp[:ensemble_size]
+                    epses_temp = epses_temp[:ensemble_size]
+                    epses_temp_nn = epses_temp_nn[:ensemble_size]
 
                 if iter_i == 0:
                     model_obj.update_iparams(
@@ -243,6 +254,7 @@ class ABC_SMC(BaseMethod):
                         "model_obj": model_obj,
                         "data_obj": data_obj,
                         "epses": epses_temp,
+                        "epses_nn": epses_temp_nn,
                     }
 
                     self.save(output_file, **extra_args)
@@ -299,6 +311,8 @@ def abc_smc_worker(*args: Any) -> Tuple[np.ndarray, np.ndarray]:
 
     # TODO: revert profiles to proper order after data_dt resorting
 
+    error_no_noise = data_obj.sumstat(profiles, stype=summary_type, use_mask=True)
+
     # generate synthetic noise
     profiles = data_obj.add_noise(profiles)
 
@@ -308,4 +322,4 @@ def abc_smc_worker(*args: Any) -> Tuple[np.ndarray, np.ndarray]:
 
     result = model_obj.iparams_arr[accept_mask]
     # print("WORKER DONE", result.shape, error[accept_mask].shape)
-    return result, error[accept_mask]
+    return result, error[accept_mask], error_no_noise[accept_mask]

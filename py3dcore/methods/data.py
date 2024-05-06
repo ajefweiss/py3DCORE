@@ -151,7 +151,7 @@ class FittingData(object):
                 data[np.isnan(data)] = 0
 
                 # TODO: remove hard coding
-                self.gauss_noise_level.append(2)
+                self.gauss_noise_level.append(4)
         else:
             raise NotImplementedError
 

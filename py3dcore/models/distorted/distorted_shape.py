@@ -10,6 +10,10 @@ from py3dcore.rotqs import _numba_quaternion_rotate
 
 s_h = 0.00002
 
+Nstep_s = 20
+Nstep_xy = 12
+Nstep_pol = 8
+
 
 @numba.njit(cache=True)
 def distorted_bfield(
@@ -58,11 +62,19 @@ def distorted_bfield(
     # metric (without D)
     goDf = Df_ev * K * (Dfdmu_ev * DOmdnu_ev - Dfdnu_ev * DOmdmu_ev)
 
-    denom = 1 + t**2 * mu_i**2
+    # print(Dfdmu_ev, DOmdnu_ev, Dfdnu_ev, DOmdmu_ev)
 
-    # chi and xi (be careful with nu/s dependencies here)
+    # goldhoyle chi and xi (be careful with nu/s dependencies here)
+    denom = 1 + t**2 * mu_i**2
     b_chi = Df_ev_const_nu * t / denom
     b_xi = Df_ev_const_s * corr_const_s / denom
+
+    # bessel chi and xi (be careful with nu/s dependencies here)
+    # x = 2 * mu_i
+    # j0 = 1 - 1 / 4 * x**2 + 1 / 64 * x**4 - 1 / 2304 * x**6
+    # j1 = x / 2 - x**3 / 16 + x**5 / 384
+    # b_chi = Df_ev_const_nu * j1
+    # b_xi = Df_ev_const_s * corr_const_s * j0
 
     # apply metric
     b_nu = b_chi / goDf
@@ -203,21 +215,35 @@ def Df(
 
     phi = DOm(mu, nu, rho_1, k1, k2)
 
+    # rho circle
     # return rho_1 * mu * np.abs(np.sin(np.pi * s)) ** 2
 
-    return (
-        rho_1
-        * mu
-        / np.sqrt(np.cos(phi) ** 2 + (df * np.sin(phi)) ** 2)
-        * np.abs(np.sin(np.pi * s)) ** 2
-    )
-
+    # rho ellipse
     # return (
     #     rho_1
     #     * mu
-    #     / np.sqrt(np.cos(phi) ** 2 + (1 / delta * np.sin(phi)) ** 2)
+    #     / np.sqrt(np.cos(phi) ** 2 + (df * np.sin(phi)) ** 2)
     #     * np.abs(np.sin(np.pi * s)) ** 2
     # )
+
+    # rho distorted
+    k = 3
+    ff = 0.6
+    return (
+        rho_1
+        * mu
+        * (
+            1
+            + 2
+            * mu**ff
+            * np.abs(np.sin(np.pi * s)) ** 3
+            * (np.exp(k * np.cos(phi)) - np.exp(-k))
+            / (np.exp(k) - np.exp(-k))
+        )
+        / np.sqrt(np.cos(phi) ** 2 + (df * np.sin(phi)) ** 2)
+        * np.abs(np.sin(np.pi * s)) ** 2
+        / (1 + mu**ff * np.abs(np.sin(np.pi * s)) ** 3)
+    )
 
 
 @numba.njit(cache=True)
@@ -306,6 +332,8 @@ def get_n_vectors(
     # n1 candidate pointing towards (rho_0, 0, 0)
     n1c = np.array([rho_0, 0, 0]) - gv
 
+    # n1c = np.array([rho_0 - 5 * np.abs(np.sin(np.pi * s)) ** 6, 0, 0]) - gv
+
     # orthogonalize vector
     n1cu = n1c - tv * np.dot(tv, n1c)
 
@@ -334,10 +362,12 @@ def DOm(mu: float, nu: float, rho_1: float, k1: float, k2: float) -> float:
     shift = np.floor(np.abs(nu))
     shift_sgn = np.sign(nu)
 
-    return 2 * np.pi * shift * shift_sgn + 2 * np.arctan(
-        rho_1 * mu * k2
-        + np.tan(np.pi * (nu + 0.5)) * np.sqrt(1 - (rho_1 * mu) ** 2 * (k1**2 + k2**2))
-    )
+    return np.pi * (2 * nu - 1)
+
+    # return 2 * np.pi * shift * shift_sgn + 2 * np.arctan(
+    #     rho_1 * mu * k2
+    #     + np.tan(np.pi * (nu + 0.5)) * np.sqrt(1 - (rho_1 * mu) ** 2 * (k1**2 + k2**2))
+    # )
 
 
 # # normal DOm
@@ -377,7 +407,7 @@ def distorted_qs(
     q: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_xs: np.ndarray,
+    q_qs: np.ndarray,
     s: np.ndarray,
 ) -> None:
     (q0, q1, q2) = q
@@ -418,7 +448,7 @@ def distorted_qs(
 
     x = np.array([0, r[0], r[1], r[2]])
 
-    s[:] = _numba_quaternion_rotate(x, q_xs)
+    s[:] = _numba_quaternion_rotate(x, q_qs)
 
 
 @guvectorize(
@@ -433,8 +463,8 @@ def distorted_sq_gh(
     s: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_sx: np.ndarray,
-    q_xs: np.ndarray,
+    q_sq: np.ndarray,
+    q_qs: np.ndarray,
     q: np.ndarray,
 ) -> None:
     (
@@ -461,7 +491,7 @@ def distorted_sq_gh(
     (_, rho_0, rho_1, b_t, gamma_l) = sparams
 
     _s = np.array([0, s[0], s[1], s[2]]).astype(s.dtype)
-    xs = _numba_quaternion_rotate(_s, q_sx)
+    xs = _numba_quaternion_rotate(_s, q_sq)
 
     # evaluate 20 gammas and find closest s coordinate
     s_list = np.linspace(0.1, 0.9, 50)
@@ -491,7 +521,7 @@ def distorted_sq_gh(
 
     s_h2 = 5 * s_h
 
-    for i in range(20):
+    for i in range(Nstep_s):
         df_si = np.linalg.norm(
             rho_0 * gamma(s_i, alpha, beta, lambda_v, epsilon, kappa) - xs
         )
@@ -564,7 +594,7 @@ def distorted_sq_gh(
     # first we need good initial estimates, assuming DOm is linear
     # note that this all works very badly if mu_i << 1
     # TODO: improve algorithm for small mu
-    Np = 8
+    Np = Nstep_pol
     mnu_i_0 = np.empty((Np, 2))
 
     for i in range(Np):
@@ -589,7 +619,7 @@ def distorted_sq_gh(
         last_corr = 1
         sfac = 1
 
-        for i in range(8):
+        for i in range(Nstep_xy):
             mu_i = mnu_i[0]
             nu_i = mnu_i[1]
 
@@ -687,7 +717,7 @@ def distorted_sq_gh(
 
         # rotate back into s-frame
         _qb = np.array([0, q[0], q[1], q[2]]).astype(s.dtype)
-        q[:] = _numba_quaternion_rotate(_qb, q_xs)
+        q[:] = _numba_quaternion_rotate(_qb, q_qs)
 
     else:
         q[:] = np.array([0, 0, 0])
@@ -706,8 +736,8 @@ def distorted_sq_rho(
     s: np.ndarray,
     iparams: np.ndarray,
     sparams: np.ndarray,
-    q_sx: np.ndarray,
-    q_xs: np.ndarray,
+    q_sq: np.ndarray,
+    q_qs: np.ndarray,
     rho: np.float64,
 ) -> None:
     (
@@ -734,7 +764,7 @@ def distorted_sq_rho(
     (_, rho_0, rho_1, b_t, gamma_l) = sparams
 
     _s = np.array([0, s[0], s[1], s[2]]).astype(s.dtype)
-    xs = _numba_quaternion_rotate(_s, q_sx)
+    xs = _numba_quaternion_rotate(_s, q_sq)
 
     # evaluate 20 gammas and find closest s coordinate
     s_list = np.linspace(0.1, 0.9, 50)

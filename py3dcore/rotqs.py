@@ -14,8 +14,8 @@ from numba import guvectorize
 
 def generate_quaternions(
     arr: np.ndarray,
-    qs_sx: np.ndarray,
-    qs_xs: np.ndarray,
+    qs_sq: np.ndarray,
+    qs_qs: np.ndarray,
     indices: Optional[Iterable] = None,
 ) -> None:
     if indices is None:
@@ -38,8 +38,8 @@ def generate_quaternions(
         inc, quaternion_rotate(ux, _numba_quaternion_multiply(rlat, rlon))
     )
 
-    _numba_quaternion_multiply(rinc, _numba_quaternion_multiply(rlat, rlon), qs_xs)
-    _numba_quaternion_conjugate(qs_xs, qs_sx)
+    _numba_quaternion_multiply(rinc, _numba_quaternion_multiply(rlat, rlon), qs_qs)
+    _numba_quaternion_conjugate(qs_qs, qs_sq)
 
 
 def quaternion_rotate(vec: np.ndarray, q: np.ndarray) -> np.ndarray:
