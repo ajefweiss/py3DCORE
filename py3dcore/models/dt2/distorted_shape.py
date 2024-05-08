@@ -10,9 +10,15 @@ from py3dcore.rotqs import _numba_quaternion_rotate
 
 s_h = 0.00005
 
-Nstep_s = 20
-Nstep_xy = 12
-Nstep_pol = 7
+# low res
+# Nstep_s = 20
+# Nstep_xy = 12
+# Nstep_pol = 5
+
+# high res
+Nstep_s = 75
+Nstep_xy = 50
+Nstep_pol = 11
 
 
 @numba.njit(cache=True)
@@ -33,7 +39,7 @@ def distorted_bfield(
     twist: float,
     vel05: float,
     vel_si: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -43,9 +49,58 @@ def distorted_bfield(
     # correct twist for ellipse circumference (as factor)
     t = twist * rho_1  # / rho_0 / 2 / np.pi
 
-    Df_ev = Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
-    Dfdmu_ev = Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
-    Dfdnu_ev = Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+    Df_ev = Df(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Dfdmu_ev = Dfdmu(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Dfdnu_ev = Dfdnu(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
     Dfds_ev = Dfds(
         mu_i,
         nu_i,
@@ -57,7 +112,7 @@ def distorted_bfield(
         delta,
         delta2,
         phi_off,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -77,7 +132,7 @@ def distorted_bfield(
         delta,
         delta2,
         phi_off,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -88,10 +143,60 @@ def distorted_bfield(
     cosDOm = np.cos(DOm(mu_i, nu_i, rho_1, k1, k2))
     sinDOm = np.sin(DOm(mu_i, nu_i, rho_1, k1, k2))
 
-    Dfdmu_ev_const_s = Dfdmu(mu_i, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off)
-    # Dfdmu_ev_const_mu_s = Dfdmu(0.5, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off)
-    Df_ev_const_nu = Df(mu_i, 0, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
-    Df_ev_const_s = Df(mu_i, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off, 0)
+    Dfdmu_ev_const_s = Dfdmu(
+        mu_i,
+        nu_i,
+        0.5,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+
+    Df_ev_const_nu = Df(
+        mu_i,
+        0,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Df_ev_const_s = Df(
+        mu_i,
+        nu_i,
+        0.5,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
 
     # curvature
     K = 1 - Df_ev * (k1 * cosDOm + k2 * sinDOm)
@@ -163,7 +268,7 @@ def distorted_rho(
     twist: float,
     vel05: float,
     vel_si: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -173,10 +278,75 @@ def distorted_rho(
     # correct twist for ellipse circumference (as factor)
     t = twist * rho_1  # / rho_0 / 2 / np.pi
 
-    Df_ev = Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
-    Dfdmu_ev = Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
-    Dfdmu_ev_0 = Dfdmu(0.25, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
-    Dfdnu_ev = Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+    Df_ev = Df(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Dfdmu_ev = Dfdmu(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Dfdmu_ev_0 = Dfdmu(
+        0.25,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Dfdnu_ev = Dfdnu(
+        mu_i,
+        nu_i,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
     Dfds_ev = Dfds(
         mu_i,
         nu_i,
@@ -188,7 +358,7 @@ def distorted_rho(
         delta,
         delta2,
         phi_off,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -208,7 +378,7 @@ def distorted_rho(
         delta,
         delta2,
         phi_off,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -219,11 +389,59 @@ def distorted_rho(
     cosDOm = np.cos(DOm(mu_i, nu_i, rho_1, k1, k2))
     sinDOm = np.sin(DOm(mu_i, nu_i, rho_1, k1, k2))
 
-    Dfdmu_ev_const_s = Dfdmu(mu_i, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off)
-    # Dfdmu_ev_const_mu_s = Dfdmu(0.5, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off)
-    Df_ev_const_nu = Df(mu_i, 0, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
-    Df_ev_const_s = Df(mu_i, nu_i, 0.5, rho_1, k1, k2, delta, delta2, phi_off, 0)
-
+    Dfdmu_ev_const_s = Dfdmu(
+        mu_i,
+        nu_i,
+        0.5,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Df_ev_const_nu = Df(
+        mu_i,
+        0,
+        s_i,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
+    Df_ev_const_s = Df(
+        mu_i,
+        nu_i,
+        0.5,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    )
     # curvature
     K = 1 - Df_ev * (k1 * cosDOm + k2 * sinDOm)
 
@@ -242,8 +460,40 @@ def distorted_rho(
         Df_ev_const_nu
         * t
         / denom
-        * Dfdmu(mu_i, 0, s_i, rho_1, k1, k2, delta, delta2, phi_off)
-        / Dfdmu(0.33, 0, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+        * Dfdmu(
+            mu_i,
+            0,
+            s_i,
+            rho_0,
+            rho_1,
+            k1,
+            k2,
+            delta,
+            delta2,
+            phi_off,
+            alpha,
+            beta,
+            lambda_v,
+            epsilon,
+            kappa,
+        )
+        / Dfdmu(
+            0.33,
+            0,
+            s_i,
+            rho_0,
+            rho_1,
+            k1,
+            k2,
+            delta,
+            delta2,
+            phi_off,
+            alpha,
+            beta,
+            lambda_v,
+            epsilon,
+            kappa,
+        )
     ) * np.sin(np.pi * s_i)
     b_xi = DOmdnu_ev * Df_ev_const_s * Dfdmu_ev_const_s / denom
 
@@ -289,7 +539,7 @@ def distorted_rho(
 @numba.njit(cache=True)
 def gamma(
     s: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -308,7 +558,7 @@ def gamma(
 @numba.njit(cache=True)
 def dgds(
     s: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -317,19 +567,19 @@ def dgds(
 ) -> np.ndarray:
     if s < 2 * s_h:
         return (
-            gamma(s + s_h, phihw, alpha, beta, lambda_v, epsilon, kappa)
-            - gamma(s, phihw, alpha, beta, lambda_v, epsilon, kappa)
+            gamma(s + s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - gamma(s, mu_max, alpha, beta, lambda_v, epsilon, kappa)
         ) / s_h
     elif s > 1 - 2 * s_h:
         return (
-            gamma(s, phihw, alpha, beta, lambda_v, epsilon, kappa)
-            - gamma(s - s_h, phihw, alpha, beta, lambda_v, epsilon, kappa)
+            gamma(s, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - gamma(s - s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa)
         ) / s_h
     else:
         return (
             (
-                gamma(s + s_h, phihw, alpha, beta, lambda_v, epsilon, kappa)
-                - gamma(s - s_h, phihw, alpha, beta, lambda_v, epsilon, kappa)
+                gamma(s + s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+                - gamma(s - s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa)
             )
             / 2
             / s_h
@@ -347,6 +597,7 @@ def Df(
     mu: float,
     nu: float,
     s: float,
+    rho_0: float,
     rho_1: float,
     k1: float,
     k2: float,
@@ -354,13 +605,23 @@ def Df(
     delta2: float,
     phi_off: float,
     dom_offset: float,
+    alpha: float,
+    beta: float,
+    lambda_v: float,
+    epsilon: float,
+    kappa: float,
 ) -> float:
     d1 = delta_func(mu, s, delta)
     d2 = delta_func(mu, s, delta * delta2)
 
     phi = DOm(mu, nu, rho_1, k1, k2)
 
+    # gamma_ev = rho_0 * gamma(s, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+    # gamma_0 = rho_0 * gamma(0.5, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+
     sigma = rho_1 * np.sin(np.pi * s) ** 2
+
+    # sigma = rho_1 * gamma_ev / gamma_0
 
     omega = phi + phi_off + dom_offset
 
@@ -388,26 +649,100 @@ def Dfdmu(
     mu: float,
     nu: float,
     s: float,
+    rho_0: float,
     rho_1: float,
     k1: float,
     k2: float,
     delta: float,
     delta2: float,
     phi_off: float,
+    alpha: float,
+    beta: float,
+    lambda_v: float,
+    epsilon: float,
+    kappa: float,
 ) -> float:
     if mu > s_h:
         return (
             (
-                Df(mu + s_h, nu, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
-                - Df(mu - s_h, nu, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                Df(
+                    mu + s_h,
+                    nu,
+                    s,
+                    rho_0,
+                    rho_1,
+                    k1,
+                    k2,
+                    delta,
+                    delta2,
+                    phi_off,
+                    0,
+                    alpha,
+                    beta,
+                    lambda_v,
+                    epsilon,
+                    kappa,
+                )
+                - Df(
+                    mu - s_h,
+                    nu,
+                    s,
+                    rho_0,
+                    rho_1,
+                    k1,
+                    k2,
+                    delta,
+                    delta2,
+                    phi_off,
+                    0,
+                    alpha,
+                    beta,
+                    lambda_v,
+                    epsilon,
+                    kappa,
+                )
             )
             / 2
             / s_h
         )
     else:
         return (
-            Df(mu + s_h, nu, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
-            - Df(mu, nu, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
+            Df(
+                mu + s_h,
+                nu,
+                s,
+                rho_0,
+                rho_1,
+                k1,
+                k2,
+                delta,
+                delta2,
+                phi_off,
+                0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
+            )
+            - Df(
+                mu,
+                nu,
+                s,
+                rho_0,
+                rho_1,
+                k1,
+                k2,
+                delta,
+                delta2,
+                phi_off,
+                0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
+            )
         ) / s_h
 
 
@@ -416,17 +751,57 @@ def Dfdnu(
     mu: float,
     nu: float,
     s: float,
+    rho_0: float,
     rho_1: float,
     k1: float,
     k2: float,
     delta: float,
     delta2: float,
     phi_off: float,
+    alpha: float,
+    beta: float,
+    lambda_v: float,
+    epsilon: float,
+    kappa: float,
 ) -> float:
     return (
         (
-            Df(mu, nu + s_h, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
-            - Df(mu, nu - s_h, s, rho_1, k1, k2, delta, delta2, phi_off, 0)
+            Df(
+                mu,
+                nu + s_h,
+                s,
+                rho_0,
+                rho_1,
+                k1,
+                k2,
+                delta,
+                delta2,
+                phi_off,
+                0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
+            )
+            - Df(
+                mu,
+                nu - s_h,
+                s,
+                rho_0,
+                rho_1,
+                k1,
+                k2,
+                delta,
+                delta2,
+                phi_off,
+                0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
+            )
         )
         / 2
         / s_h
@@ -445,7 +820,7 @@ def Dfds(
     delta: float,
     delta2: float,
     phi_off: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -455,10 +830,10 @@ def Dfds(
     # need to account for differences in k1/k2 due to frame trick
 
     _, n1_0, _, k1_0, k2_0 = get_n_vectors(
-        rho_0 * gamma(s + s_h, phihw, alpha, beta, lambda_v, epsilon, kappa),
+        rho_0 * gamma(s + s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa),
         s + s_h,
         rho_0,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -467,10 +842,10 @@ def Dfds(
     )
 
     _, n1_1, _, k1_1, k2_1 = get_n_vectors(
-        rho_0 * gamma(s - s_h, phihw, alpha, beta, lambda_v, epsilon, kappa),
+        rho_0 * gamma(s - s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa),
         s - s_h,
         rho_0,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -478,52 +853,43 @@ def Dfds(
         kappa,
     )
 
-    # missing cross-section rotation
-
-    # kappa_0 = np.sqrt(k1_0**2 + k2_0**2)
-    # kappa_1 = np.sqrt(k1_1**2 + k2_1**2)
-
-    # # nu value also changes, we can figure out the effective rotation by measuring change in k1/k2
-    # # under assumption that curvature stays the same
-
-    # if k1_1 != 0:
-    #     drot = np.arccos(k1_0 * kappa_0 / k1_1 / kappa_1)
-    # elif k1_0 != 0:
-    #     drot = -np.arccos(k1_1 * kappa_1 / k1_0 / kappa_0)
-    # else:
-    #     drot = 0
-
-    # # print(drot, np.arccos(k1_0 * kappa_0 / k1_1 / kappa_1), k1_0, k1_1)
-
-    # if np.isnan(drot):
-    #     drot = 0
-    # drot = 0
-
     return (
         (
             Df(
                 mu,
                 nu,
                 s + s_h,
+                rho_0,
                 rho_1,
-                k1_0,
-                k2_0,
+                k1,
+                k2,
                 delta,
                 delta2,
                 phi_off,
                 0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
             )
             - Df(
                 mu,
                 nu,
                 s - s_h,
+                rho_0,
                 rho_1,
-                k1_1,
-                k2_1,
+                k1,
+                k2,
                 delta,
                 delta2,
                 phi_off,
                 0,
+                alpha,
+                beta,
+                lambda_v,
+                epsilon,
+                kappa,
             )
         )
         / 2
@@ -536,7 +902,7 @@ def get_n_vectors(
     gv: np.ndarray,
     s: float,
     rho_0: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -546,8 +912,8 @@ def get_n_vectors(
     # compute t vector numerically
     dgdvs = (
         (
-            rho_0 * gamma(s + 0.005, phihw, alpha, beta, lambda_v, epsilon, kappa)
-            - rho_0 * gamma(s - 0.005, phihw, alpha, beta, lambda_v, epsilon, kappa)
+            rho_0 * gamma(s + 0.005, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - rho_0 * gamma(s - 0.005, mu_max, alpha, beta, lambda_v, epsilon, kappa)
         )
         / 2
         / s_h
@@ -555,9 +921,9 @@ def get_n_vectors(
 
     # second order derivative
     dgdvs2 = (
-        rho_0 * gamma(s + 0.005, phihw, alpha, beta, lambda_v, epsilon, kappa)
+        rho_0 * gamma(s + 0.005, mu_max, alpha, beta, lambda_v, epsilon, kappa)
         - 2 * gv
-        + rho_0 * gamma(s - 0.005, phihw, alpha, beta, lambda_v, epsilon, kappa)
+        + rho_0 * gamma(s - 0.005, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     ) / s_h**2
 
     # get curve velocity vel
@@ -656,7 +1022,7 @@ def DOmds(
     delta: float,
     delta2: float,
     phi_off: float,
-    phihw: float,
+    mu_max: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -665,10 +1031,10 @@ def DOmds(
 ) -> float:
 
     _, n1_0, _, k1_0, k2_0 = get_n_vectors(
-        rho_0 * gamma(s + s_h, phihw, alpha, beta, lambda_v, epsilon, kappa),
+        rho_0 * gamma(s + s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa),
         s + s_h,
         rho_0,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -677,10 +1043,10 @@ def DOmds(
     )
 
     _, n1_1, _, k1_1, k2_1 = get_n_vectors(
-        rho_0 * gamma(s - s_h, phihw, alpha, beta, lambda_v, epsilon, kappa),
+        rho_0 * gamma(s - s_h, mu_max, alpha, beta, lambda_v, epsilon, kappa),
         s - s_h,
         rho_0,
-        phihw,
+        mu_max,
         alpha,
         beta,
         lambda_v,
@@ -730,19 +1096,36 @@ def distorted_qs(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
     (_, rho_0, rho_1, b_t, _, _) = sparams
 
-    gv = rho_0 * gamma(q2, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(q2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
 
     _, n1, n2, k1, k2 = get_n_vectors(
-        gv, q2, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, q2, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
-    r = gv + Df(q0, q1, q2, rho_1, k1, k2, delta, delta2, phi_off, 0) * (
+    r = gv + Df(
+        q0,
+        q1,
+        q2,
+        rho_0,
+        rho_1,
+        k1,
+        k2,
+        delta,
+        delta2,
+        phi_off,
+        0,
+        alpha,
+        beta,
+        lambda_v,
+        epsilon,
+        kappa,
+    ) * (
         n1 * np.cos(DOm(q0, q1, rho_1, k1, k2))
         + n2 * np.sin(DOm(q0, q1, rho_1, k1, k2))
     )
@@ -789,21 +1172,21 @@ def distorted_qs_gh(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
     (_, rho_0, rho_1, b_t, gamma_l, vel05) = sparams
 
-    gv = rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     tv, n1, n2, k1, k2 = get_n_vectors(
-        gv, s_i, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, s_i, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
-    if mu_i < 1:
+    if mu_i < mu_max:
 
         vel_s_i = rho_0 * np.linalg.norm(
-            (dgds(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa))
+            (dgds(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa))
         )
 
         # correct twist by flux rope length
@@ -826,7 +1209,7 @@ def distorted_qs_gh(
             twist,
             vel05,
             vel_s_i,
-            phihw,
+            mu_max,
             alpha,
             beta,
             lambda_v,
@@ -880,7 +1263,7 @@ def distorted_sq_gh(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
@@ -895,7 +1278,7 @@ def distorted_sq_gh(
     s_g_list = np.array(
         [
             np.linalg.norm(
-                rho_0 * gamma(_, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+                rho_0 * gamma(_, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
             )
             for _ in s_list
         ]
@@ -921,13 +1304,15 @@ def distorted_sq_gh(
 
     for i in range(Nstep_s):
         df_si = np.linalg.norm(
-            rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
         )
         df_si_plus = np.linalg.norm(
-            rho_0 * gamma(s_i + s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i + s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
         df_si_minus = np.linalg.norm(
-            rho_0 * gamma(s_i - s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i - s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
 
         d1f = (df_si_plus - df_si_minus) / 2 / s_h2
@@ -975,9 +1360,9 @@ def distorted_sq_gh(
         return
 
     # compute n1, n2 for specific s_i
-    gv = rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     tv, n1, n2, k1, k2 = get_n_vectors(
-        gv, s_i, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, s_i, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
     dxs = xs - gv
@@ -999,7 +1384,22 @@ def distorted_sq_gh(
         # offset initial angle values, this fixes things for some reason (dislikes 0.0/1.0 as initial)
         mnu_i_0[i, 1] = i / Np + 1 / Np / 3
         mnu_i_0[i, 0] = np.linalg.norm(dxs) / Df(
-            0.9, i / Np + 1 / Np / 3, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0
+            0.9,
+            i / Np + 1 / Np / 3,
+            s_i,
+            rho_0,
+            rho_1,
+            k1,
+            k2,
+            delta,
+            delta2,
+            phi_off,
+            0,
+            alpha,
+            beta,
+            lambda_v,
+            epsilon,
+            kappa,
         )
 
     mnu_results = np.ones((Np, 4))
@@ -1028,10 +1428,44 @@ def distorted_sq_gh(
 
             Fv = np.array(
                 [
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * cosDOm
                     - n1p,
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * sinDOm
                     - n2p,
                 ]
@@ -1040,26 +1474,158 @@ def distorted_sq_gh(
             DFv = np.array(
                 [
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
@@ -1114,10 +1680,10 @@ def distorted_sq_gh(
     # print("result mu/nu", np.round(mu_i, 3), np.round(nu_i, 3), np.log10(err))
 
     # compute b within s coordinates
-    if mu_i < 1 and err < 1e-5:
+    if mu_i < mu_max and err < 1e-5:
 
         vel_s_i = rho_0 * np.linalg.norm(
-            (dgds(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa))
+            (dgds(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa))
         )
 
         # correct twist by flux rope length
@@ -1140,7 +1706,7 @@ def distorted_sq_gh(
             twist,
             vel05,
             vel_s_i,
-            phihw,
+            mu_max,
             alpha,
             beta,
             lambda_v,
@@ -1193,7 +1759,7 @@ def distorted_sq(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
@@ -1208,7 +1774,7 @@ def distorted_sq(
     s_g_list = np.array(
         [
             np.linalg.norm(
-                rho_0 * gamma(_, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+                rho_0 * gamma(_, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
             )
             for _ in s_list
         ]
@@ -1234,13 +1800,15 @@ def distorted_sq(
 
     for i in range(Nstep_s):
         df_si = np.linalg.norm(
-            rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
         )
         df_si_plus = np.linalg.norm(
-            rho_0 * gamma(s_i + s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i + s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
         df_si_minus = np.linalg.norm(
-            rho_0 * gamma(s_i - s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i - s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
 
         d1f = (df_si_plus - df_si_minus) / 2 / s_h2
@@ -1288,9 +1856,9 @@ def distorted_sq(
         return
 
     # compute n1, n2 for specific s_i
-    gv = rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     tv, n1, n2, k1, k2 = get_n_vectors(
-        gv, s_i, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, s_i, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
     dxs = xs - gv
@@ -1312,7 +1880,22 @@ def distorted_sq(
         # offset initial angle values, this fixes things for some reason (dislikes 0.0/1.0 as initial)
         mnu_i_0[i, 1] = i / Np + 1 / Np / 3
         mnu_i_0[i, 0] = np.linalg.norm(dxs) / Df(
-            0.9, i / Np + 1 / Np / 3, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0
+            0.9,
+            i / Np + 1 / Np / 3,
+            s_i,
+            rho_0,
+            rho_1,
+            k1,
+            k2,
+            delta,
+            delta2,
+            phi_off,
+            0,
+            alpha,
+            beta,
+            lambda_v,
+            epsilon,
+            kappa,
         )
 
     mnu_results = np.ones((Np, 4))
@@ -1341,10 +1924,44 @@ def distorted_sq(
 
             Fv = np.array(
                 [
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * cosDOm
                     - n1p,
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * sinDOm
                     - n2p,
                 ]
@@ -1353,26 +1970,158 @@ def distorted_sq(
             DFv = np.array(
                 [
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
@@ -1466,7 +2215,7 @@ def distorted_gh(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
@@ -1474,16 +2223,16 @@ def distorted_gh(
 
     (mu_i, nu_i, s_i) = q_in
 
-    gv = rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     tv, n1, n2, k1, k2 = get_n_vectors(
-        gv, s_i, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, s_i, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
     # compute b within s coordinates
     if mu_i < 1:
 
         vel_s_i = rho_0 * np.linalg.norm(
-            (dgds(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa))
+            (dgds(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa))
         )
 
         # correct twist by flux rope length
@@ -1506,7 +2255,7 @@ def distorted_gh(
             twist,
             vel05,
             vel_s_i,
-            phihw,
+            mu_max,
             alpha,
             beta,
             lambda_v,
@@ -1561,7 +2310,7 @@ def distorted_sq_rho(
         lambda_v,
         epsilon,
         kappa,
-        phihw,
+        mu_max,
         delta2,
         phi_off,
     ) = iparams
@@ -1576,7 +2325,7 @@ def distorted_sq_rho(
     s_g_list = np.array(
         [
             np.linalg.norm(
-                rho_0 * gamma(_, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+                rho_0 * gamma(_, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
             )
             for _ in s_list
         ]
@@ -1602,13 +2351,15 @@ def distorted_sq_rho(
 
     for i in range(Nstep_s):
         df_si = np.linalg.norm(
-            rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa) - xs
         )
         df_si_plus = np.linalg.norm(
-            rho_0 * gamma(s_i + s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i + s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
         df_si_minus = np.linalg.norm(
-            rho_0 * gamma(s_i - s_h2, phihw, alpha, beta, lambda_v, epsilon, kappa) - xs
+            rho_0 * gamma(s_i - s_h2, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+            - xs
         )
 
         d1f = (df_si_plus - df_si_minus) / 2 / s_h2
@@ -1656,9 +2407,9 @@ def distorted_sq_rho(
         return
 
     # compute n1, n2 for specific s_i
-    gv = rho_0 * gamma(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa)
+    gv = rho_0 * gamma(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa)
     tv, n1, n2, k1, k2 = get_n_vectors(
-        gv, s_i, rho_0, phihw, alpha, beta, lambda_v, epsilon, kappa
+        gv, s_i, rho_0, mu_max, alpha, beta, lambda_v, epsilon, kappa
     )
 
     dxs = xs - gv
@@ -1680,7 +2431,22 @@ def distorted_sq_rho(
         # offset initial angle values, this fixes things for some reason (dislikes 0.0/1.0 as initial)
         mnu_i_0[i, 1] = i / Np + 1 / Np / 3
         mnu_i_0[i, 0] = np.linalg.norm(dxs) / Df(
-            0.9, i / Np + 1 / Np / 3, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0
+            0.9,
+            i / Np + 1 / Np / 3,
+            s_i,
+            rho_0,
+            rho_1,
+            k1,
+            k2,
+            delta,
+            delta2,
+            phi_off,
+            0,
+            alpha,
+            beta,
+            lambda_v,
+            epsilon,
+            kappa,
         )
 
     mnu_results = np.ones((Np, 4))
@@ -1709,10 +2475,44 @@ def distorted_sq_rho(
 
             Fv = np.array(
                 [
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * cosDOm
                     - n1p,
-                    Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                    Df(
+                        mu_i,
+                        nu_i,
+                        s_i,
+                        rho_0,
+                        rho_1,
+                        k1,
+                        k2,
+                        delta,
+                        delta2,
+                        phi_off,
+                        0,
+                        alpha,
+                        beta,
+                        lambda_v,
+                        epsilon,
+                        kappa,
+                    )
                     * sinDOm
                     - n2p,
                 ]
@@ -1721,26 +2521,158 @@ def distorted_sq_rho(
             DFv = np.array(
                 [
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
-                        - Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        - Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
                     [
-                        Dfdmu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdmu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdmu(mu_i, nu_i, rho_1, k1, k2),
-                        Dfdnu(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off)
+                        Dfdnu(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * sinDOm
-                        + Df(mu_i, nu_i, s_i, rho_1, k1, k2, delta, delta2, phi_off, 0)
+                        + Df(
+                            mu_i,
+                            nu_i,
+                            s_i,
+                            rho_0,
+                            rho_1,
+                            k1,
+                            k2,
+                            delta,
+                            delta2,
+                            phi_off,
+                            0,
+                            alpha,
+                            beta,
+                            lambda_v,
+                            epsilon,
+                            kappa,
+                        )
                         * cosDOm
                         * DOmdnu(mu_i, nu_i, rho_1, k1, k2),
                     ],
@@ -1798,7 +2730,7 @@ def distorted_sq_rho(
     if mu_i < 1.5 and err < 1e-5:
 
         vel_s_i = rho_0 * np.linalg.norm(
-            (dgds(s_i, phihw, alpha, beta, lambda_v, epsilon, kappa))
+            (dgds(s_i, mu_max, alpha, beta, lambda_v, epsilon, kappa))
         )
 
         # correct twist by flux rope length
@@ -1821,7 +2753,7 @@ def distorted_sq_rho(
             twist,
             vel05,
             vel_s_i,
-            phihw,
+            mu_max,
             alpha,
             beta,
             lambda_v,

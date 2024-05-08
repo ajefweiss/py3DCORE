@@ -113,11 +113,15 @@ class DT2Model(SimulationBlackBox):
             raise NotImplementedError
 
     def visualize_shape(
-        self, iparam_index: int = 0, resolution: int = 20
+        self,
+        iparam_index: int = 0,
+        resolution: int = 20,
+        s_max: float = 1,
+        s_min: float = 0,
     ) -> np.ndarray:
         r = np.array([1.0], dtype=self.dtype)
         u = np.linspace(0, 1, resolution)
-        v = np.linspace(0, 1, resolution)
+        v = np.linspace(s_min, s_max, resolution)
         c1 = len(u)
         c2 = len(v)
         # combination of wireframe points in (q)

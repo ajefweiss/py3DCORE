@@ -155,8 +155,8 @@
         "index": 16,
         "name": "width power parameter",
         "distribution": "fixed",
-        "default_value": 1,
-        "maximum": 2,
+        "default_value": 2,
+        "maximum": 8,
         "minimum": 0,
         "boundary": "continuous",
         "label": "\\lambda"
@@ -166,8 +166,8 @@
         "name": "wave parameter",
         "distribution": "uniform",
         "default_value": 0,
-        "maximum": 4,
-        "minimum": -4,
+        "maximum": 10,
+        "minimum": -10,
         "boundary": "continuous",
         "label": "\\epsilon"
     },
@@ -176,20 +176,20 @@
         "name": "wave shift parameter",
         "distribution": "uniform",
         "default_value": 0,
-        "maximum": 2,
-        "minimum": -2,
+        "maximum": 8,
+        "minimum": -8,
         "boundary": "continuous",
         "label": "\\kappa"
     },
-    "phihw": {
+    "mu_,ax": {
         "index": 19,
-        "name": "half width",
+        "name": "out flux surface",
         "distribution": "fixed",
         "default_value": 1,
-        "maximum": 1.7,
-        "minimum": 0.3,
+        "maximum": 1,
+        "minimum": 0.75,
         "boundary": "continuous",
-        "label": "\\varphi_{hw}"
+        "label": "\\mu_\\m"
     },
     "cme_aspect_ratio_back_ratio": {
         "index": 20,
