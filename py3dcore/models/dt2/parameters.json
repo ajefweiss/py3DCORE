@@ -181,7 +181,7 @@
         "boundary": "continuous",
         "label": "\\kappa"
     },
-    "mu_,ax": {
+    "mu_ax": {
         "index": 19,
         "name": "out flux surface",
         "distribution": "fixed",

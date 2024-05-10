@@ -11,14 +11,14 @@ from py3dcore.rotqs import _numba_quaternion_rotate
 s_h = 0.00005
 
 # low res
-# Nstep_s = 20
-# Nstep_xy = 12
-# Nstep_pol = 5
+Nstep_s = 25
+Nstep_xy = 15
+Nstep_pol = 7
 
-# high res
-Nstep_s = 75
-Nstep_xy = 50
-Nstep_pol = 11
+# # high res
+# Nstep_s = 50
+# Nstep_xy = 50
+# Nstep_pol = 7
 
 
 @numba.njit(cache=True)
@@ -60,7 +60,6 @@ def distorted_bfield(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -172,7 +171,6 @@ def distorted_bfield(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -190,7 +188,6 @@ def distorted_bfield(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -289,7 +286,6 @@ def distorted_rho(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -417,7 +413,6 @@ def distorted_rho(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -435,7 +430,6 @@ def distorted_rho(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -604,7 +598,6 @@ def Df(
     delta: float,
     delta2: float,
     phi_off: float,
-    dom_offset: float,
     alpha: float,
     beta: float,
     lambda_v: float,
@@ -616,15 +609,18 @@ def Df(
 
     phi = DOm(mu, nu, rho_1, k1, k2)
 
-    # gamma_ev = rho_0 * gamma(s, mu_max, alpha, beta, lambda_v, epsilon, kappa)
-    # gamma_0 = rho_0 * gamma(0.5, mu_max, alpha, beta, lambda_v, epsilon, kappa)
+    gamma_ev = np.linalg.norm(
+        rho_0 * gamma(s, 1, alpha, beta, lambda_v, epsilon, kappa)
+    )
+    gamma_0 = np.linalg.norm(
+        rho_0 * gamma(0.5, 1, alpha, beta, lambda_v, epsilon, kappa)
+    )
 
-    sigma = rho_1 * np.sin(np.pi * s) ** 2
+    # sigma = rho_1 * np.sin(np.pi * s) ** 2
 
-    # sigma = rho_1 * gamma_ev / gamma_0
+    sigma = rho_1 * gamma_ev / gamma_0
 
-    omega = phi + phi_off + dom_offset
-
+    omega = phi + phi_off
     if omega > 2 * np.pi or omega < 0:
         omega = omega % (2 * np.pi)
 
@@ -676,7 +672,6 @@ def Dfdmu(
                     delta,
                     delta2,
                     phi_off,
-                    0,
                     alpha,
                     beta,
                     lambda_v,
@@ -694,7 +689,6 @@ def Dfdmu(
                     delta,
                     delta2,
                     phi_off,
-                    0,
                     alpha,
                     beta,
                     lambda_v,
@@ -718,7 +712,6 @@ def Dfdmu(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -736,7 +729,6 @@ def Dfdmu(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -777,7 +769,6 @@ def Dfdnu(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -795,7 +786,6 @@ def Dfdnu(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -866,7 +856,6 @@ def Dfds(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -884,7 +873,6 @@ def Dfds(
                 delta,
                 delta2,
                 phi_off,
-                0,
                 alpha,
                 beta,
                 lambda_v,
@@ -1119,7 +1107,6 @@ def distorted_qs(
         delta,
         delta2,
         phi_off,
-        0,
         alpha,
         beta,
         lambda_v,
@@ -1394,7 +1381,6 @@ def distorted_sq_gh(
             delta,
             delta2,
             phi_off,
-            0,
             alpha,
             beta,
             lambda_v,
@@ -1439,7 +1425,6 @@ def distorted_sq_gh(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -1459,7 +1444,6 @@ def distorted_sq_gh(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -1503,7 +1487,6 @@ def distorted_sq_gh(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -1541,7 +1524,6 @@ def distorted_sq_gh(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -1581,7 +1563,6 @@ def distorted_sq_gh(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -1619,7 +1600,6 @@ def distorted_sq_gh(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -1890,7 +1870,6 @@ def distorted_sq(
             delta,
             delta2,
             phi_off,
-            0,
             alpha,
             beta,
             lambda_v,
@@ -1935,7 +1914,6 @@ def distorted_sq(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -1955,7 +1933,6 @@ def distorted_sq(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -1999,7 +1976,6 @@ def distorted_sq(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2037,7 +2013,6 @@ def distorted_sq(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2077,7 +2052,6 @@ def distorted_sq(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2115,7 +2089,6 @@ def distorted_sq(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2441,7 +2414,6 @@ def distorted_sq_rho(
             delta,
             delta2,
             phi_off,
-            0,
             alpha,
             beta,
             lambda_v,
@@ -2486,7 +2458,6 @@ def distorted_sq_rho(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -2506,7 +2477,6 @@ def distorted_sq_rho(
                         delta,
                         delta2,
                         phi_off,
-                        0,
                         alpha,
                         beta,
                         lambda_v,
@@ -2550,7 +2520,6 @@ def distorted_sq_rho(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2588,7 +2557,6 @@ def distorted_sq_rho(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2628,7 +2596,6 @@ def distorted_sq_rho(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
@@ -2666,7 +2633,6 @@ def distorted_sq_rho(
                             delta,
                             delta2,
                             phi_off,
-                            0,
                             alpha,
                             beta,
                             lambda_v,
