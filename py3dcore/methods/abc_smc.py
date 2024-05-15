@@ -160,6 +160,11 @@ class ABC_SMC(BaseMethod):
                         ensemble_size,
                     )
 
+                    if dt_pcount < 10:
+                        logger.info(
+                            "less than 10 hits, dumping iparams {}", particles_temp
+                        )
+
                     if pcount > ensemble_size:
                         break
 

@@ -17,8 +17,8 @@ from ...model import SimulationBlackBox
 from .distorted_shape import dgds, distorted_qs, distorted_sq, distorted_sq_gh
 
 
-class DT2Model(SimulationBlackBox):
-    """Implements the distorted model.
+class DTHELModel(SimulationBlackBox):
+    """Implements the distorted model (for the purpose of density output).
 
     Model Parameters
     ================
@@ -83,7 +83,7 @@ class DT2Model(SimulationBlackBox):
             else:
                 raise KeyError('key "%s" not defined in parameters.json', k)
 
-        super(DT2Model, self).__init__(
+        super(DTHELModel, self).__init__(
             dt_0,
             iparams=iparams_dict,
             sparams=6,
