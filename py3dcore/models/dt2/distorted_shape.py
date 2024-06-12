@@ -618,7 +618,7 @@ def Df(
 
     # sigma = rho_1 * np.sin(np.pi * s) ** 2
 
-    sigma = rho_1 * gamma_ev / gamma_0
+    sigma = rho_1 * gamma_ev**2 / gamma_0**2
 
     omega = phi + phi_off
     if omega > 2 * np.pi or omega < 0:
