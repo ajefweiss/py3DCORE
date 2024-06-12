@@ -8,12 +8,12 @@ from numba import guvectorize
 
 from py3dcore.rotqs import _numba_quaternion_rotate
 
-s_h = 0.00005
+s_h = 1 / (2**14)
 
 # low res
-Nstep_s = 100
-Nstep_xy = 50
-Nstep_pol = 9
+Nstep_s = 125
+Nstep_xy = 75
+Nstep_pol = 11
 
 
 @numba.njit(cache=True)
@@ -513,7 +513,7 @@ def distorted_rho(
     b_t = np.linalg.norm(b_nu * eps_nu + b_s * eps_s)
 
     rho = (
-        (1.25 - b_t**2)
+        (1.75 - b_t**2)
         * Dfdmu_ev_0
         / Dfdmu_ev
         * (1 + np.cos(DOm(mu_i, nu_i, rho_1, k1, k2) / 2) ** 2)
@@ -540,7 +540,7 @@ def gamma(
         [
             (1 - np.cos(2 * np.pi * s)),
             alpha * (1 / (1 + np.exp(-10 * lambda_v * (s - 0.5))) - 0.5),
-            beta * np.sin(epsilon * np.pi * s + kappa * np.pi) * np.sin(np.pi * s),
+            beta * np.sin(epsilon * np.pi * s + kappa * np.pi) * np.sin(np.pi * s)**2,
         ]
     )
 

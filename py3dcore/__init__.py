@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from py3dcore.methods import ABC_SMC
-from py3dcore.models import DT2Model, DTHELModel, ToroidalModel
+# from py3dcore.models import DT2Model, DTHELModel, ToroidalModel
+from py3dcore.models import DT2Model
 
 __author__ = "Andreas J. Weiss"
 __copyright__ = "Copyright (C) 2019 Andreas J. Weiss"

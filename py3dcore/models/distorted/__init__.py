@@ -15,6 +15,7 @@ import py3dcore
 from ...model import SimulationBlackBox
 from .distorted_shape import dgds, distorted_qs, distorted_sq_gh
 
+print("importing distorted (bad)")
 
 class DistortedModel(SimulationBlackBox):
     """Implements the distorted model.

@@ -160,11 +160,6 @@ class ABC_SMC(BaseMethod):
                         ensemble_size,
                     )
 
-                    if dt_pcount < 10:
-                        logger.info(
-                            "less than 10 hits, dumping iparams {}", particles_temp
-                        )
-
                     if pcount > ensemble_size:
                         break
 
@@ -181,7 +176,7 @@ class ABC_SMC(BaseMethod):
                     sub_iter_i += 1
                     total_runs += jobs * int(self.model_kwargs["ensemble_size"])  #
 
-                    if pcount < ensemble_size / 12:
+                    if pcount < ensemble_size / 15:
                         logger.warning("not enough hits, aborting")
                         kill_flag = True
                         break
@@ -234,7 +229,7 @@ class ABC_SMC(BaseMethod):
                     self.hist_eps.append(new_eps)  #
 
                 logger.info(
-                    "setting new eps: %s => %s", self.hist_eps[-2], self.hist_eps[-1]
+                    "setting new eps: %s => %s (true min eps: %s)", self.hist_eps[-2], self.hist_eps[-1], np.min(epses_temp_nn)
                 )
 
                 self.hist_time.append(time.time() - timer_iter)

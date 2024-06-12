@@ -16,6 +16,7 @@ import py3dcore
 from ...model import SimulationBlackBox
 from .distorted_shape import dgds, distorted_qs, distorted_sq, distorted_sq_gh
 
+print("importing dt_hel")
 
 class DTHELModel(SimulationBlackBox):
     """Implements the distorted model (for the purpose of density output).

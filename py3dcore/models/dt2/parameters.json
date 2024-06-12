@@ -176,8 +176,8 @@
         "name": "wave shift parameter",
         "distribution": "uniform",
         "default_value": 0,
-        "maximum": 8,
-        "minimum": -8,
+        "maximum": 1,
+        "minimum": -1,
         "boundary": "continuous",
         "label": "\\kappa"
     },
