@@ -11,14 +11,14 @@ from py3dcore.rotqs import _numba_quaternion_rotate
 s_h = 0.00005
 
 # low res
-# Nstep_s = 25
+# Nstep_s = 30
 # Nstep_xy = 20
 # Nstep_pol = 5
 
-# # high res
-Nstep_s = 100
-Nstep_xy = 75
-Nstep_pol = 9
+# # # high res
+Nstep_s = 125
+Nstep_xy = 125
+Nstep_pol = 11
 
 
 @numba.njit(cache=True)
@@ -544,7 +544,7 @@ def gamma(
         [
             (1 - np.cos(2 * np.pi * s)),
             alpha * np.sin(2 * np.pi * s) * np.sin(np.pi * s) ** lambda_v,
-            beta * np.sin(epsilon * np.pi * s + kappa * np.pi) * np.sin(np.pi * s)**2,
+            beta * np.sin(epsilon * np.pi * s + kappa * np.pi) * np.sin(np.pi * s) ** 2,
         ]
     )
 
@@ -618,7 +618,7 @@ def Df(
 
     # sigma = rho_1 * np.sin(np.pi * s) ** 2
 
-    sigma = rho_1 * gamma_ev**2 / gamma_0**2
+    sigma = rho_1 * gamma_ev / gamma_0
 
     omega = phi + phi_off
     if omega > 2 * np.pi or omega < 0:

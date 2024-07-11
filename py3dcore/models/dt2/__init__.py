@@ -18,6 +18,7 @@ from .distorted_shape import dgds, distorted_qs, distorted_sq, distorted_sq_gh
 
 print("importing dt2model")
 
+
 class DT2Model(SimulationBlackBox):
     """Implements the distorted model.
 
@@ -113,12 +114,35 @@ class DT2Model(SimulationBlackBox):
         else:
             raise NotImplementedError
 
-    def visualize_shape(
+    def visualize_gamma(
         self,
         iparam_index: int = 0,
         resolution: int = 20,
         s_max: float = 1,
         s_min: float = 0,
+    ) -> np.ndarray:
+        sv = np.linspace(s_min, s_max, resolution)
+
+        arr = np.array([[0, 0, _] for _ in sv])
+        arr2 = np.zeros_like(arr)
+
+        for i in range(0, len(sv)):
+            distorted_qs(
+                arr[i],
+                self.iparams_arr[iparam_index],
+                self.sparams_arr[iparam_index],
+                self.qs_qs[iparam_index],
+                arr2[i],
+            )
+
+        return arr2
+
+    def visualize_shape(
+        self,
+        iparam_index: int = 0,
+        resolution: int = 20,
+        s_max: float = 0.1,
+        s_min: float = 0.9,
     ) -> np.ndarray:
         r = np.array([1.0], dtype=self.dtype)
         u = np.linspace(0, 1, resolution)

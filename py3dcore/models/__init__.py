@@ -2,5 +2,6 @@
 
 # from .distorted import DistortedModel  # noqa: F401
 from .dt2 import DT2Model  # noqa: F401
-from .dt_hel import DTHELModel  # noqa: F401
+
+# from .dt_hel import DTHELModel  # noqa: F401
 from .toroidal import ToroidalModel  # noqa: F401
